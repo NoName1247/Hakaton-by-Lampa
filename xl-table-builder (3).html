@@ -404,10 +404,37 @@ document.getElementById('btnApplyFilters').addEventListener('click', function(){
 document.getElementById('btnSavePreset').addEventListener('click', function(){ toast('Сценарий сохранён'); });
 
 // ── PROMPT ───────────────────────────────────────────────────────────────────
+var API_BASE = 'http://139.60.162.135:8000';
+
 function goToEditorFromPrompt() {
   var v = document.getElementById('promptTa').value.trim();
   if (!v) { toast('Введите запрос'); return; }
-  showView('editor');
+  var btn = document.getElementById('btnToEditor');
+  btn.disabled = true;
+  btn.textContent = 'Загрузка...';
+  toast('Запрос обрабатывается...', 8000);
+  fetch(API_BASE + '/api/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: v })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    btn.disabled = false; btn.textContent = 'Найти';
+    if (data.detail) { toast('Ошибка: ' + data.detail, 4000); return; }
+    if (data.columns && data.rows) {
+      S.saveUndo();
+      S.headers = data.columns;
+      S.data = data.rows.length ? data.rows : [new Array(data.columns.length).fill('')];
+      S.sel = {r:0,c:0}; S.selEnd = null;
+      showView('editor');
+      if (data.ai_comment) addMsg(data.ai_comment, 'ai');
+    }
+  })
+  .catch(function(err) {
+    btn.disabled = false; btn.textContent = 'Найти';
+    toast('Ошибка соединения с сервером: ' + err.message, 5000);
+  });
 }
 document.getElementById('btnToEditor').addEventListener('click', goToEditorFromPrompt);
 var promptTa = document.getElementById('promptTa');
@@ -1108,26 +1135,50 @@ document.getElementById('btnChat').classList.add('active');
 document.getElementById('btnChat').addEventListener('click', function(){
   document.getElementById('chatInp').focus();
 });
-var chatReplies = [
-  'Нажмите ПКМ на ячейке — там все операции со строками и столбцами.',
-  'Клик по заголовку столбца сортирует таблицу, повторный клик меняет порядок.',
-  'Ctrl+Z отменяет последнее действие, Ctrl+Y повторяет.',
-  'Для экспорта нажмите кнопку "Экспорт" в верхней панели.'
-];
-function sendChat() {
-  var inp = document.getElementById('chatInp');
-  var msg = inp.value.trim(); if (!msg) return;
-  addMsg(msg, 'user'); inp.value = '';
-  setTimeout(function(){
-    addMsg(chatReplies[Math.floor(Math.random() * chatReplies.length)], 'ai');
-  }, 600);
-}
 function addMsg(text, role) {
   var d = document.createElement('div');
   d.className = 'msg ' + role; d.textContent = text;
   var msgs = document.getElementById('chatMsgs');
   msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
 }
+
+function sendChat() {
+  var inp = document.getElementById('chatInp');
+  var msg = inp.value.trim(); if (!msg) return;
+  addMsg(msg, 'user'); inp.value = '';
+
+  var sendBtn = document.getElementById('btnChatSend');
+  sendBtn.disabled = true; sendBtn.textContent = '...';
+
+  var currentTable = { headers: S.headers, rows: S.data };
+
+  fetch(API_BASE + '/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg, current_table: currentTable })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    sendBtn.disabled = false; sendBtn.textContent = 'Применить';
+    if (data.detail) { addMsg('Ошибка: ' + data.detail, 'ai'); return; }
+    if (data.ai_message) addMsg(data.ai_message, 'ai');
+    if ((data.action === 'transform' || data.action === 'query') && data.table) {
+      if (data.table.headers && data.table.rows) {
+        S.saveUndo();
+        S.headers = data.table.headers;
+        S.data = data.table.rows.length ? data.table.rows : [new Array(data.table.headers.length).fill('')];
+        S.sel = {r:0,c:0}; S.selEnd = null;
+        S.render();
+        toast('Таблица обновлена');
+      }
+    }
+  })
+  .catch(function(err) {
+    sendBtn.disabled = false; sendBtn.textContent = 'Применить';
+    addMsg('Ошибка соединения: ' + err.message, 'ai');
+  });
+}
+
 document.getElementById('btnChatSend').addEventListener('click', sendChat);
 document.getElementById('chatInp').addEventListener('keydown', function(e){ if(e.key==='Enter') sendChat(); });
 

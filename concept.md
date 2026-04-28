@@ -520,7 +520,93 @@ Backend не доверяет пользовательскому вводу:
 - История минимум на 10 версий плана.
 - Redis persistence + резервное хранение планов в PostgreSQL.
 
-## 14. Резюме архитектурных принципов
+## 14. GigaChat Backend Integration
+
+### Архитектура потока данных
+
+```
+Пользователь → index.html (Lampa)
+  → POST /api/query {query: "данные по Коммунальному хозяйству"}
+  → FastAPI (backend/main.py, порт 8000)
+  → GigaChat API: системный промпт + схема БД → JSON-план
+  → SQLite executor (backend/db.py): SELECT только по whitelist-таблицам
+  → {columns, rows, ai_comment}
+  → S.headers / S.data → render в таблице экрана 3
+```
+
+Редактирование таблицы через AI-чат:
+```
+Пользователь → чат-панель (AI помощник)
+  → POST /api/chat {message, current_table}
+  → FastAPI → GigaChat: текущая таблица + инструкция
+  → {action: "transform"|"query", table, ai_message}
+  → S.data обновляется → render
+```
+
+### Структура файлов
+
+```
+backend/
+  main.py          — FastAPI: /api/query, /api/chat, /api/schema, /health
+  etl.py           — CSV → SQLite (запускать один раз)
+  db.py            — read-only executor JSON-планов
+  gigachat.py      — OAuth 2.0 токен + /chat/completions
+  prompts.py       — системные промпты для query и chat режимов
+  schema_context.py— динамическая схема из SQLite PRAGMA
+  requirements.txt — fastapi, uvicorn, httpx, python-dotenv, pydantic
+  data.db          — SQLite база (создаётся etl.py)
+```
+
+### Схема SQLite-таблиц (mart-слой)
+
+| Таблица                | Источник                         | Join-ключ                       |
+|------------------------|----------------------------------|---------------------------------|
+| `mart_rchb`            | `1. РЧБ/*.csv` (с 11-й строки)   | `kcsr_norm`                     |
+| `mart_agreements`      | `2. Соглашения/*.csv`            | `kcsr_norm`                     |
+| `mart_gz_budgetlines`  | `3. ГЗ/Бюджетные строки.csv`     | `kcsr_norm`, `con_document_id`  |
+| `mart_gz_contracts`    | `3. ГЗ/Контракты и договора.csv` | `con_document_id`               |
+| `mart_gz_payments`     | `3. ГЗ/Платежки.csv`             | `con_document_id`               |
+| `mart_buau`            | `4. Выгрузка БУАУ/*.csv`         | `kcsr_norm`                     |
+
+Нормализация `kcsr_norm`: убираем точки и пробелы, верхний регистр.
+Пример: `08.3.02.97070` → `083029707 0` → `0830297070`.
+
+### Политика READ-ONLY
+
+- GigaChat не имеет прямого доступа к БД — только получает схему в тексте промпта.
+- Генерирует JSON-план (sources, filters, columns, joins) — без SQL.
+- Backend (`db.py`) валидирует таблицы по whitelist, имена колонок по regex, параметры через prepared statements.
+- Никакой INSERT/UPDATE/DELETE через API невозможен.
+
+### Формат JSON-плана (от GigaChat к backend)
+
+```json
+{
+  "sources": ["mart_rchb"],
+  "filters": {"kcsr_name_contains": "Коммунальное хозяйство"},
+  "columns": ["kcsr_raw", "kcsr_name", "budget_name", "limit_amount", "spend_amount"],
+  "joins": [],
+  "ai_comment": "Данные по коммунальному хозяйству из росписи"
+}
+```
+
+Поддерживаемые фильтры: `kcsr_name_contains`, `kcsr_norm_eq`, `budget_name_contains`,
+`org_name_contains`, `kfsr_code_eq`, `date_from`, `date_to`.
+
+Whitelist join-relations: `gz_budgetlines_to_contracts_by_con_document_id`,
+`gz_contracts_to_payments_by_con_document_id`, `rchb_to_buau_by_kcsr_norm`,
+`rchb_to_agreements_by_kcsr_norm`, `rchb_to_gz_budgetlines_by_kcsr_norm`.
+
+### Деплой
+
+- Фронтенд: `python3 -m http.server 8080` в `/opt/hakaton/` (уже запущен).
+- Бэкенд: `uvicorn main:app --host 0.0.0.0 --port 8000` в `/opt/hakaton/backend/`.
+- Переменные окружения: `/opt/hakaton/.env` (GIGACHAT_AUTHORIZATION_KEY, GIGACHAT_SCOPE, GIGACHAT_OAUTH_URL).
+- ETL: `python3 etl.py` (запускать при изменении исходных CSV).
+
+---
+
+## 15. Резюме архитектурных принципов
 
 Система строится по принципу:
 
