@@ -40,6 +40,11 @@ def _safe_column_name(col: str) -> str:
     raise ValueError(f"Небезопасное имя колонки: {col!r}")
 
 
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    cur = conn.execute(f"PRAGMA table_info({table})")
+    return {r[1] for r in cur.fetchall()}
+
+
 def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     """
     Выполнить JSON-план от GigaChat.
@@ -60,6 +65,8 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         raise ValueError("sources пустой")
 
     primary = sources[0]
+    conn = _get_conn()
+    primary_columns = _table_columns(conn, primary)
 
     # Собрать JOIN-ы
     joined_tables = [primary]
@@ -74,20 +81,52 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
             )
             joined_tables.append(right)
 
-    # Колонки: если не указаны — берём первые 10 из primary таблицы
-    if not columns:
-        conn = _get_conn()
-        cur = conn.execute(f"PRAGMA table_info({primary})")
-        columns = [r[1] for r in cur.fetchall() if r[1] != "id"][:10]
-        conn.close()
+    # Нормализация колонок из плана.
+    # LLM иногда возвращает "*" или "table.*" — в этом случае используем дефолтный набор.
+    normalized_columns: list[str] = []
+    for c in columns:
+        cs = str(c).strip()
+        if not cs:
+            continue
+        if cs == "*" or cs.endswith(".*"):
+            continue
+        normalized_columns.append(cs)
+
+    # Колонки: если не указаны/невалидны — берём первые 10 из primary таблицы
+    if not normalized_columns:
+        normalized_columns = [c for c in primary_columns if c != "id"][:10]
+
+    # Схема доступных таблиц (primary + присоединенные joins)
+    table_columns: dict[str, set[str]] = {primary: primary_columns}
+    for jt in joined_tables:
+        if jt != primary:
+            table_columns[jt] = _table_columns(conn, jt)
 
     safe_cols = []
-    for c in columns:
-        if "." in c:
-            t, col = c.split(".", 1)
-            safe_cols.append(f"{_safe_column_name(t)}.{_safe_column_name(col)}")
-        else:
-            safe_cols.append(_safe_column_name(c))
+    for c in normalized_columns:
+        try:
+            if "." in c:
+                t, col = c.split(".", 1)
+                t = _safe_column_name(t)
+                col = _safe_column_name(col)
+                if t in table_columns and col in table_columns[t]:
+                    safe_cols.append(f"{t}.{col}")
+            else:
+                col = _safe_column_name(c)
+                # Сначала пробуем primary
+                if col in primary_columns:
+                    safe_cols.append(f"{primary}.{col}")
+                else:
+                    # Потом ищем в joined таблицах
+                    owners = [t for t, cols in table_columns.items() if col in cols]
+                    if len(owners) == 1:
+                        safe_cols.append(f"{owners[0]}.{col}")
+        except ValueError:
+            # Пропускаем отдельные небезопасные/невалидные колонки из LLM-плана
+            continue
+
+    if not safe_cols:
+        safe_cols = [f"{primary}.{c}" for c in primary_columns if c != "id"][:10]
 
     select_expr = ", ".join(safe_cols) if safe_cols else f"{primary}.*"
 
@@ -108,6 +147,13 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         where_parts.append(f"{primary}.{col} LIKE ?")
         params.append(f"%{filters['budget_name_contains']}%")
 
+    if "budget_name_contains_any" in filters:
+        col = "budget_name" if primary in ("mart_rchb", "mart_buau") else "caption"
+        vals = [str(v).strip() for v in filters.get("budget_name_contains_any", []) if str(v).strip()]
+        if vals:
+            where_parts.append("(" + " OR ".join([f"{primary}.{col} LIKE ?" for _ in vals]) + ")")
+            params.extend([f"%{v}%" for v in vals])
+
     if "org_name_contains" in filters:
         if primary == "mart_buau":
             where_parts.append(f"mart_buau.org_name LIKE ?")
@@ -121,15 +167,72 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         where_parts.append(f"{primary}.kfsr_code = ?")
         params.append(filters["kfsr_code_eq"])
 
-    if "date_from" in filters:
+    # Фильтр по месяцу через source_file (март -> март%, июнь -> июнь%)
+    if "source_file_contains" in filters and "source_file" in primary_columns:
+        where_parts.append(f"{primary}.source_file LIKE ?")
+        params.append(f"%{filters['source_file_contains']}%")
+
+    # Несколько месяцев/паттернов по source_file (OR)
+    if "source_file_contains_any" in filters and "source_file" in primary_columns:
+        vals = [str(v).strip() for v in filters.get("source_file_contains_any", []) if str(v).strip()]
+        if vals:
+            where_parts.append("(" + " OR ".join([f"{primary}.source_file LIKE ?" for _ in vals]) + ")")
+            params.extend([f"%{v}%" for v in vals])
+
+    # posting_date_contains: дата в формате dd.mm.yyyy — ищем по подстроке
+    if "posting_date_contains" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
+        date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
+        where_parts.append(f"{primary}.{date_col} LIKE ?")
+        params.append(f"%{filters['posting_date_contains']}%")
+
+    # posting_month: "03" или "3" → ищем .03. в дате dd.mm.yyyy
+    if "posting_month" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
+        month = filters["posting_month"].zfill(2)
+        date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
+        where_parts.append(f"{primary}.{date_col} LIKE ?")
+        params.append(f"%.{month}.%")
+
+    # posting_year: "2025" → ищем .2025 в конце даты
+    if "posting_year" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
+        date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
+        where_parts.append(f"{primary}.{date_col} LIKE ?")
+        params.append(f"%.{filters['posting_year']}")
+
+    if "date_from" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
         date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
         where_parts.append(f"{primary}.{date_col} >= ?")
         params.append(filters["date_from"])
 
-    if "date_to" in filters:
+    if "date_to" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
         date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
         where_parts.append(f"{primary}.{date_col} <= ?")
         params.append(filters["date_to"])
+
+    # Фильтр по % освоения для таблиц, где есть limit_amount + spend_amount
+    # execution_percent = spend_amount / limit_amount * 100
+    if "execution_percent_gt" in filters and ("limit_amount" in primary_columns and "spend_amount" in primary_columns):
+        try:
+            v = float(filters["execution_percent_gt"])
+            where_parts.append(f"({primary}.limit_amount > 0 AND ({primary}.spend_amount * 100.0 / {primary}.limit_amount) > ?)")
+            params.append(v)
+        except (TypeError, ValueError):
+            pass
+
+    if "execution_percent_gte" in filters and ("limit_amount" in primary_columns and "spend_amount" in primary_columns):
+        try:
+            v = float(filters["execution_percent_gte"])
+            where_parts.append(f"({primary}.limit_amount > 0 AND ({primary}.spend_amount * 100.0 / {primary}.limit_amount) >= ?)")
+            params.append(v)
+        except (TypeError, ValueError):
+            pass
+
+    if "execution_percent_lt" in filters and ("limit_amount" in primary_columns and "spend_amount" in primary_columns):
+        try:
+            v = float(filters["execution_percent_lt"])
+            where_parts.append(f"({primary}.limit_amount > 0 AND ({primary}.spend_amount * 100.0 / {primary}.limit_amount) < ?)")
+            params.append(v)
+        except (TypeError, ValueError):
+            pass
 
     where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
     join_sql = " ".join(join_clauses)
@@ -142,7 +245,6 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         LIMIT {limit}
     """
 
-    conn = _get_conn()
     try:
         cur = conn.execute(sql, params)
         rows_raw = cur.fetchall()
