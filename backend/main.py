@@ -1,4 +1,4 @@
-import json, re, os, sys, math, statistics
+import json, re, os, sys, math, statistics, time, uuid
 from typing import Optional
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -16,11 +16,19 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 class QueryRequest(BaseModel):
     query: str
     current_table: Optional[dict] = None
+    page_size: Optional[int] = 300
 
 class ChatRequest(BaseModel):
     message: str
     current_table: dict
     history: Optional[list[dict]] = None
+    query_id: Optional[str] = None
+
+
+class QueryPageRequest(BaseModel):
+    query_id: str
+    offset: int
+    limit: int = 300
 
 COLUMN_LABELS = {
     "kcsr_raw":"КЦСР","kcsr_norm":"КЦСР (норм.)","kcsr_name":"Наименование КЦСР",
@@ -42,6 +50,43 @@ def _norm(s): return re.sub(r"[^a-zа-я0-9]+","",str(s or "").lower().replace("
 def _to_num(v):
     try: return float(str(v).replace("%","").replace(",",".").replace(" ","").replace("\xa0",""))
     except: return None
+
+
+QUERY_CACHE_TTL_SEC = 30 * 60
+QUERY_CACHE_MAX_ITEMS = 40
+QUERY_CACHE: dict[str, dict] = {}
+
+
+def _cache_cleanup():
+    now = time.time()
+    stale = [k for k, v in QUERY_CACHE.items() if now - float(v.get("created_at", 0)) > QUERY_CACHE_TTL_SEC]
+    for k in stale:
+        QUERY_CACHE.pop(k, None)
+    if len(QUERY_CACHE) > QUERY_CACHE_MAX_ITEMS:
+        # удаляем самые старые записи
+        keys_by_age = sorted(QUERY_CACHE.keys(), key=lambda k: QUERY_CACHE[k].get("created_at", 0))
+        for k in keys_by_age[: max(0, len(QUERY_CACHE) - QUERY_CACHE_MAX_ITEMS)]:
+            QUERY_CACHE.pop(k, None)
+
+
+def _cache_put(headers: list[str], rows: list[list], plan: dict, ai_comment: str) -> str:
+    _cache_cleanup()
+    qid = uuid.uuid4().hex
+    QUERY_CACHE[qid] = {
+        "headers": list(headers or []),
+        "rows": [list(r) for r in (rows or [])],
+        "plan": dict(plan or {}),
+        "ai_comment": ai_comment,
+        "created_at": time.time(),
+    }
+    return qid
+
+
+def _cache_get(query_id: Optional[str]) -> Optional[dict]:
+    if not query_id:
+        return None
+    _cache_cleanup()
+    return QUERY_CACHE.get(query_id)
 
 # ── JSON extraction ─────────────────────────────────────────────────────────
 
@@ -105,6 +150,61 @@ def _normalize_query_plan(plan):
         except (TypeError, ValueError):
             current_limit = 0
         plan["limit"] = max(current_limit, 2000)
+
+    # Универсальный поиск "по любому показателю":
+    # если LLM не выставил конкретные semantic-фильтры, добавляем токены
+    # для сквозного contains-поиска по текстовым полям.
+    has_specific_filters = any(
+        k in filters for k in (
+            "kcsr_name_contains", "kcsr_norm_eq", "budget_name_contains", "budget_name_contains_any",
+            "org_name_contains", "kfsr_code_eq", "kfsr_name_contains", "source_file_contains",
+            "source_file_contains_any", "posting_month", "posting_year", "date_from", "date_to",
+        )
+    )
+    if not has_specific_filters:
+        # Выделяем смысловые токены из пользовательского текста.
+        raw_tokens = re.findall(r"[a-zа-я0-9]+", q)
+        stop = {
+            "дай", "мне", "все", "данные", "по", "за", "для", "где", "и", "или", "с", "на", "к", "от",
+            "это", "этот", "эта", "эти", "какие", "какой", "какая", "покажи", "связанные", "связано",
+            "нужны", "нужно", "нужен", "найди", "найти", "записи", "строки", "таблица", "таблицу",
+            "про", "поиск", "показателю", "показатель"
+        }
+        tokens = [t for t in raw_tokens if len(t) >= 4 and t not in stop]
+        # Ограничиваем количество, чтобы запрос не стал слишком тяжелым.
+        if tokens:
+            filters["any_text_contains_all"] = tokens[:4]
+
+    # Подбор primary-источника по тематике запроса (чтобы реально использовать все наборы данных).
+    if any(k in q for k in ("соглашен", "регномер", "получател", "dd_recipient")):
+        plan["sources"] = ["mart_agreements"]
+    elif any(k in q for k in ("платеж", "платежк", "кассовые выплаты", "platezhka")):
+        plan["sources"] = ["mart_gz_payments"]
+    elif any(k in q for k in ("контракт", "договор", "con_number", "con_amount")):
+        plan["sources"] = ["mart_gz_contracts"]
+    elif any(k in q for k in ("буау", "учрежден", "организац", "org_name")):
+        plan["sources"] = ["mart_buau"]
+    elif any(k in q for k in ("гз", "бюджетные строки", "purposefulgrant", "con_document_id")):
+        plan["sources"] = ["mart_gz_budgetlines"]
+
+    # Тематический запрос "дорожное хозяйство" — направляем в mart_rchb + kfsr_name.
+    if any(k in q for k in ("дорожн", "дорожное хозяйство", "дорожным хозяйством")):
+        try:
+            sources = plan.get("sources", [])
+            if not isinstance(sources, list):
+                sources = []
+            if "mart_rchb" not in sources:
+                sources = ["mart_rchb"]
+            plan["sources"] = sources
+        except Exception:
+            plan["sources"] = ["mart_rchb"]
+
+        if not filters.get("kfsr_name_contains"):
+            filters["kfsr_name_contains"] = "дорож"
+        # Если LLM ошибочно положил "дорож..." в kcsr_name — снимаем слишком узкое условие.
+        kcsr_contains = str(filters.get("kcsr_name_contains", "")).lower()
+        if "дорож" in kcsr_contains:
+            filters.pop("kcsr_name_contains", None)
 
     return plan
 
@@ -593,6 +693,70 @@ def _local_transform(current_table, message):
             return {"action":"transform","table":{"headers":headers,"rows":new_rows},
                     "ai_message":f"Заполнил все ячейки значением «{val}»"}
 
+    # ── СУММА ПО КОНКРЕТНОЙ КОЛОНКЕ (без изменения таблицы) ─────────────
+    # Примеры:
+    # - "посчитай мне сумму всех лимитов"
+    # - "мне нужна сумма колонки limit_remainder"
+    # - "какая сумма по столбцу остаток лимитов"
+    if ("сумм" in msg_l or "итог" in msg_l) and any(k in msg_l for k in ("посчитай", "сколько", "какая", "нужно", "дай", "мне")):
+        target_ci = None
+        target_hint = ""
+
+        # Явное указание колонки/столбца/поля
+        m_sum_col = re.search(r"(?:колонк[аиуе]|столбц[аеу]|пол[ея])\s+[\"']?(.+?)[\"']?\s*$", msg_l)
+        if m_sum_col:
+            target_hint = m_sum_col.group(1).strip()
+            target_ci = _find_col(headers, target_hint)
+
+        # Частые алиасы для "остатка лимитов"
+        if target_ci is None and any(k in msg_l for k in ("limit remain", "limit_remainder", "remain", "остаток лимитов", "лимит remain", "лимит remainder")):
+            for hint in ("limit_remainder", "remain", "остаток лимитов", "лимитов остаток", "лимит остаток"):
+                ci = _find_col(headers, hint)
+                if ci is not None:
+                    target_ci = ci
+                    target_hint = hint
+                    break
+
+        # Если про "лимиты" без точного имени — берем наиболее подходящую колонку лимита
+        if target_ci is None and "лимит" in msg_l:
+            for i, h in enumerate(headers):
+                hn = _norm(h)
+                if "limit_remainder" in hn or "остатоклимитов" in hn:
+                    target_ci = i
+                    break
+            if target_ci is None:
+                for i, h in enumerate(headers):
+                    hn = _norm(h)
+                    if "лимит" in hn or "limit" in hn:
+                        target_ci = i
+                        break
+
+        # Последняя попытка: поиск по значимым токенам запроса
+        if target_ci is None:
+            for tok in re.findall(r"[a-zа-я0-9_]+", msg_l):
+                if len(tok) < 4:
+                    continue
+                ci = _find_col(headers, tok)
+                if ci is not None:
+                    target_ci = ci
+                    break
+
+        if target_ci is not None:
+            nums = _col_nums(rows, target_ci)
+            if not nums:
+                return {
+                    "action": "message",
+                    "table": current_table,
+                    "ai_message": f"Колонка «{headers[target_ci]}» не содержит числовых значений для суммирования."
+                }
+            total = sum(nums)
+            pretty = f"{total:,.2f}".replace(",", " ").replace(".00", "")
+            return {
+                "action": "message",
+                "table": current_table,
+                "ai_message": f"Сумма по колонке «{headers[target_ci]}»: {pretty}."
+            }
+
     # ── АГРЕГИРУЮЩИЕ СТРОКИ (СУММА, СРЕДНЕЕ, МЕДИАНА, МИН, МАКС, СЧЁТ) ──
     agg_map = {
         ("сумм","итог","total","sum"):          ("сумма",  lambda nums: round(sum(nums),2)),
@@ -795,19 +959,87 @@ def api_query(req: QueryRequest):
     except Exception as e: raise HTTPException(500,str(e))
 
     headers,rows=_add_pct(headers,rows)
+    # Fallback: если LLM-план не дал строк, пробуем сквозной поиск по всем таблицам.
+    if not rows:
+        try:
+            fh, fr = database.search_all_tables_any_text(req.query, total_limit=3000)
+            if fr:
+                fallback_plan = {"fallback": "all_tables_any_text"}
+                fallback_comment = "Данные найдены сквозным поиском по всем источникам (РЧБ, Соглашения, ГЗ, БУАУ)."
+                qid = _cache_put(fh, fr, fallback_plan, fallback_comment)
+                page_size = max(50, min(int(req.page_size or 300), 2000))
+                page_rows = fr[:page_size]
+                return {
+                    "columns": _labels(fh),
+                    "rows": page_rows,
+                    "ai_comment": fallback_comment,
+                    "plan": fallback_plan,
+                    "query_id": qid,
+                    "total_rows": len(fr),
+                    "offset": 0,
+                    "page_size": page_size,
+                    "has_more": len(fr) > len(page_rows),
+                }
+        except Exception:
+            pass
     if not rows:
         raise HTTPException(404, "Такие данные не найдены. Попробуйте сформулировать запрос по-другому.")
-    return {"columns":_labels(headers),"rows":rows,"ai_comment":ai_comment,"plan":plan}
+    qid = _cache_put(headers, rows, plan, ai_comment)
+    page_size = max(50, min(int(req.page_size or 300), 2000))
+    page_rows = rows[:page_size]
+    return {
+        "columns":_labels(headers),
+        "rows":page_rows,
+        "ai_comment":ai_comment,
+        "plan":plan,
+        "query_id": qid,
+        "total_rows": len(rows),
+        "offset": 0,
+        "page_size": page_size,
+        "has_more": len(rows) > len(page_rows),
+    }
+
+
+@app.post("/api/query/page")
+def api_query_page(req: QueryPageRequest):
+    cached = _cache_get(req.query_id)
+    if not cached:
+        raise HTTPException(404, "Сессия результатов истекла. Выполните запрос заново.")
+    rows = cached.get("rows", [])
+    total = len(rows)
+    offset = max(0, int(req.offset or 0))
+    limit = max(1, min(int(req.limit or 300), 2000))
+    page_rows = rows[offset: offset + limit]
+    return {
+        "query_id": req.query_id,
+        "offset": offset,
+        "limit": limit,
+        "rows": page_rows,
+        "total_rows": total,
+        "has_more": (offset + len(page_rows)) < total,
+    }
 
 @app.post("/api/chat")
 def api_chat(req: ChatRequest):
+    cached = _cache_get(req.query_id)
+    effective_table = req.current_table
+    if cached:
+        effective_table = {"headers": cached.get("headers", []), "rows": cached.get("rows", [])}
+
     # Гарантированно не дергаем LLM на приветствиях.
     if _is_greeting(req.message):
-        return {"action": "message", "table": req.current_table, "ai_message": "Привет! Готов помочь с таблицей."}
+        return {"action": "message", "table": req.current_table, "ai_message": "Привет! Готов помочь с таблицей.", "query_id": req.query_id}
 
     effective_message = _resolve_followup_message(req.message, req.history)
-    local_result = _local_transform(req.current_table, effective_message)
+    local_result = _local_transform(effective_table, effective_message)
     if local_result is not None:
+        if local_result.get("action") in ("transform", "query"):
+            tbl = local_result.get("table") or {}
+            qid = _cache_put(tbl.get("headers", []), tbl.get("rows", []), {"source": "chat_local"}, local_result.get("ai_message", "Готово"))
+            local_result["query_id"] = qid
+        else:
+            local_result["query_id"] = req.query_id
+            local_result["table"] = req.current_table
         return local_result
 
     # Спец-кейс: "посчитай сумму лимитов по всем данным" — считаем напрямую из БД.
@@ -832,7 +1064,8 @@ def api_chat(req: ChatRequest):
             return {
                 "action": "message",
                 "table": req.current_table,
-                "ai_message": f"Сумма по колонке лимитов по всем доступным данным: {pretty} руб. (учтено строк: {cnt})."
+                "ai_message": f"Сумма по колонке лимитов по всем доступным данным: {pretty} руб. (учтено строк: {cnt}).",
+                "query_id": req.query_id
             }
         except Exception:
             pass
@@ -850,11 +1083,12 @@ def api_chat(req: ChatRequest):
                     "Если нужно шире, уточните период/территорию или напишите: "
                     "«покажи максимально полную выборку без дополнительных ограничений»."
                 ),
+                "query_id": req.query_id
             }
         schema = get_schema_context()
         try:
-            txt = _plain_chat_answer(effective_message, req.current_table, schema, req.history)
-            return {"action": "message", "table": req.current_table, "ai_message": txt}
+            txt = _plain_chat_answer(effective_message, effective_table, schema, req.history)
+            return {"action": "message", "table": req.current_table, "ai_message": txt, "query_id": req.query_id}
         except Exception as e:
             msg = str(e)
             if "429" in msg:
@@ -876,7 +1110,7 @@ def api_chat(req: ChatRequest):
             }
 
     schema=get_schema_context()
-    cur_json=json.dumps({"headers":req.current_table.get("headers",[]),"rows":req.current_table.get("rows",[])[:20]},ensure_ascii=False)
+    cur_json=json.dumps({"headers":effective_table.get("headers",[]),"rows":effective_table.get("rows",[])[:20]},ensure_ascii=False)
     hist_txt = _history_to_text(req.history)
     user_msg="История диалога:\n"+hist_txt+"\n\nТекущая таблица:\n"+cur_json+"\n\nЗапрос пользователя: "+effective_message
     try:
@@ -887,34 +1121,37 @@ def api_chat(req: ChatRequest):
             return {
                 "action": "message",
                 "table": req.current_table,
-                "ai_message": "AI-сервис не настроен: проверьте ключ GigaChat в .env."
+                "ai_message": "AI-сервис не настроен: проверьте ключ GigaChat в .env.",
+                "query_id": req.query_id
             }
         if "429" in msg:
             return {
                 "action": "message",
                 "table": req.current_table,
-                "ai_message": "Сервис AI временно перегружен (лимит запросов). Повторите через 10-20 секунд."
+                "ai_message": "Сервис AI временно перегружен (лимит запросов). Повторите через 10-20 секунд.",
+                "query_id": req.query_id
             }
         raise HTTPException(502, "GigaChat: " + msg)
     try: result=_extract_json(raw)
     except Exception:
         # Если JSON сломан — делаем второй проход в текстовом режиме, чтобы не возвращать ошибку формата.
         try:
-            txt = _plain_chat_answer(effective_message, req.current_table, schema, req.history)
-            return {"action":"message","table":req.current_table,"ai_message":txt}
+            txt = _plain_chat_answer(effective_message, effective_table, schema, req.history)
+            return {"action":"message","table":req.current_table,"ai_message":txt,"query_id": req.query_id}
         except Exception:
             raw_s = (raw or "").strip()
             return {
                 "action":"message",
                 "table":req.current_table,
-                "ai_message": raw_s[:500] if raw_s else "Не удалось обработать ответ AI. Попробуйте уточнить запрос."
+                "ai_message": raw_s[:500] if raw_s else "Не удалось обработать ответ AI. Попробуйте уточнить запрос.",
+                "query_id": req.query_id
             }
     action=result.get("action","transform"); ai_msg=result.get("ai_message","Готово")
     if action=="query":
         plan=result.get("plan",{}); merge_on=result.get("merge_on")
         try: nh,nr=database.execute_plan(plan)
-        except Exception as e: return {"action":"message","table":req.current_table,"ai_message":"Ошибка: "+str(e)}
-        cur_h=req.current_table.get("headers",[]); cur_r=req.current_table.get("rows",[])
+        except Exception as e: return {"action":"message","table":req.current_table,"ai_message":"Ошибка: "+str(e), "query_id": req.query_id}
+        cur_h=effective_table.get("headers",[]); cur_r=effective_table.get("rows",[])
         if merge_on and merge_on in cur_h and merge_on in nh:
             add_h=[h for h in nh if h not in cur_h]
             nki=nh.index(merge_on); cki=cur_h.index(merge_on)
@@ -924,9 +1161,13 @@ def api_chat(req: ChatRequest):
                 kv=row[cki] if cki<len(row) else ""
                 extra=nlookup.get(kv,[""]*len(nh))
                 merged.append(list(row)+[extra[nh.index(h)] for h in add_h])
-            return {"action":"transform","table":{"headers":cur_h+_labels(add_h),"rows":merged},"ai_message":ai_msg}
-        return {"action":"query","table":{"headers":_labels(nh),"rows":nr},"ai_message":ai_msg}
+            qid = _cache_put(cur_h+_labels(add_h), merged, {"source": "chat_query_merge"}, ai_msg)
+            return {"action":"transform","table":{"headers":cur_h+_labels(add_h),"rows":merged},"ai_message":ai_msg, "query_id": qid}
+        qid = _cache_put(_labels(nh), nr, {"source": "chat_query"}, ai_msg)
+        return {"action":"query","table":{"headers":_labels(nh),"rows":nr},"ai_message":ai_msg, "query_id": qid}
     elif action=="transform":
-        return {"action":"transform","table":result.get("new_table",req.current_table),"ai_message":ai_msg}
+        tbl = result.get("new_table", effective_table)
+        qid = _cache_put(tbl.get("headers", []), tbl.get("rows", []), {"source": "chat_transform"}, ai_msg)
+        return {"action":"transform","table":tbl,"ai_message":ai_msg, "query_id": qid}
     # action=="message" или другое — просто текст без изменения таблицы
-    return {"action":"message","table":req.current_table,"ai_message":ai_msg}
+    return {"action":"message","table":req.current_table,"ai_message":ai_msg, "query_id": req.query_id}

@@ -34,6 +34,7 @@ body{min-height:100dvh;overflow:hidden;}
 .btn.active{background:var(--psoft);color:var(--primary);border-color:var(--primary);}
 .sep{width:1px;height:20px;background:var(--border);flex-shrink:0;}
 .spacer{flex:1;}
+.data-progress{font-size:12px;color:var(--muted);padding:0 8px;white-space:nowrap;}
 .view{display:none;flex:1;overflow:hidden;}
 .view.active{display:flex;flex-direction:column;}
 .sheet-menubar{display:none;align-items:center;gap:2px;padding:4px 14px;border-bottom:1px solid var(--border);background:#f8f8f5;}
@@ -251,6 +252,24 @@ body{min-height:100dvh;overflow:hidden;}
 .sheet-table td.sel{outline:2px solid var(--primary);outline-offset:-1px;z-index:1;}
 .sheet-table td.sel .ct{background:var(--psoft);}
 .sheet-table td.ir{background:#d6efef!important;}
+.col-resize-handle{
+  position:absolute;
+  top:0;
+  right:-3px;
+  width:6px;
+  height:100%;
+  cursor:col-resize;
+  z-index:8;
+}
+.row-resize-handle{
+  position:absolute;
+  left:0;
+  bottom:-3px;
+  width:100%;
+  height:6px;
+  cursor:row-resize;
+  z-index:8;
+}
 #ce{position:absolute;z-index:10;display:none;border:2px solid var(--primary);border-radius:3px;
   padding:3px 7px;font:inherit;font-size:13px;resize:none;overflow:hidden;
   background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.15);}
@@ -410,6 +429,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     <button class="btn" id="btnRedoTop" type="button">&#8631; Вперед</button>
     <button class="btn" id="btnAnalytics" type="button">Аналитика</button>
     <button class="btn" id="btnExport" type="button">Экспорт</button>
+    <span class="data-progress" id="dataProgress"></span>
     <div class="spacer"></div>
     <button class="btn" id="btnKeys" type="button">Справка</button>
     <button class="btn" id="btnChat" type="button">AI</button>
@@ -663,6 +683,7 @@ document.getElementById('fPass').addEventListener('keydown', function(e){ if(e.k
 document.getElementById('fEmail').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('fPass').focus(); });
 document.getElementById('btnBackPrompt').addEventListener('click', function(){
   if (window.Analytics) Analytics.close();
+  resetQueryState();
   showView('prompt');
 });
 document.getElementById('btnUndoTop').addEventListener('click', function(){ S.undo(); });
@@ -670,6 +691,58 @@ document.getElementById('btnRedoTop').addEventListener('click', function(){ S.re
 
 // ── PROMPT ───────────────────────────────────────────────────────────────────
 var API_BASE = 'http://139.60.162.135:8000';
+var queryState = {
+  queryId: null,
+  totalRows: 0,
+  loadedRows: 0,
+  pageSize: 300,
+  loadingMore: false
+};
+
+function updateDataProgress() {
+  var el = document.getElementById('dataProgress');
+  if (!el) return;
+  if (!queryState.queryId) { el.textContent = ''; return; }
+  el.textContent = 'Загружено ' + queryState.loadedRows + ' из ' + queryState.totalRows;
+}
+
+function resetQueryState() {
+  queryState.queryId = null;
+  queryState.totalRows = 0;
+  queryState.loadedRows = 0;
+  queryState.pageSize = 300;
+  queryState.loadingMore = false;
+  updateDataProgress();
+}
+
+function loadMoreRows() {
+  if (!queryState.queryId || queryState.loadingMore) return;
+  if (queryState.loadedRows >= queryState.totalRows) return;
+  queryState.loadingMore = true;
+  fetch(API_BASE + '/api/query/page', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      query_id: queryState.queryId,
+      offset: queryState.loadedRows,
+      limit: queryState.pageSize
+    })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    queryState.loadingMore = false;
+    if (data.detail) return;
+    var rows = Array.isArray(data.rows) ? data.rows : [];
+    if (!rows.length) return;
+    S.saveUndo();
+    Array.prototype.push.apply(S.data, rows);
+    queryState.loadedRows = S.data.length;
+    queryState.totalRows = data.total_rows || queryState.totalRows;
+    S.render();
+    updateDataProgress();
+  })
+  .catch(function(){ queryState.loadingMore = false; });
+}
 
 function goToEditorFromPrompt() {
   var v = document.getElementById('promptTa').value.trim();
@@ -700,7 +773,13 @@ function goToEditorFromPrompt() {
       S.headers = data.columns;
       S.data = data.rows.length ? data.rows : [new Array(data.columns.length).fill('')];
       S.sel = {r:0,c:0}; S.selEnd = null;
+      queryState.queryId = data.query_id || null;
+      queryState.totalRows = data.total_rows || S.data.length;
+      queryState.loadedRows = S.data.length;
+      queryState.pageSize = data.page_size || 300;
+      queryState.loadingMore = false;
       showView('editor');
+      updateDataProgress();
       if (data.ai_comment) addMsg(data.ai_comment, 'ai');
     }
   })
@@ -789,6 +868,8 @@ var S = {
     ['','','','','','','','','',''],
     ['','','','','','','','','','']
   ],
+  colWidths: [],
+  rowHeights: [],
   sel: {r:0,c:0}, selEnd: null,
   editing: false, editR: 0, editC: 0, editOrig: '',
   mouseSelecting: false,
@@ -822,12 +903,14 @@ var S = {
     h += '<thead><tr><th>#</th>';
     for (i = 0; i < C; i++) {
       var sc = this.sortCol === i ? (this.sortDir > 0 ? ' sa' : ' sd') : '';
-      h += '<th class="' + sc.trim() + '" data-ci="' + i + '">' + escH(this.headers[i]) + '</th>';
+      var w = this.colWidths[i] ? (' style="width:' + this.colWidths[i] + 'px;"') : '';
+      h += '<th class="' + sc.trim() + '" data-ci="' + i + '"' + w + '>' + escH(this.headers[i]) + '<span class="col-resize-handle" data-ci="' + i + '"></span></th>';
     }
     h += '</tr></thead><tbody>';
     for (i = 0; i < R; i++) {
-      h += '<tr>';
-      h += '<td><span class="ct">' + (i+1) + '</span></td>';
+      var rh = this.rowHeights[i] ? (' style="height:' + this.rowHeights[i] + 'px;"') : '';
+      h += '<tr' + rh + '>';
+      h += '<td><span class="ct">' + (i+1) + '</span><span class="row-resize-handle" data-ri="' + i + '"></span></td>';
       for (j = 0; j < C; j++) {
         cls = '';
         if (i === this.sel.r && j === this.sel.c) cls = 'sel';
@@ -912,6 +995,52 @@ var S = {
 
   bindTbl: function() {
     var self = this;
+    document.querySelectorAll('#st .col-resize-handle').forEach(function(handle) {
+      handle.onmousedown = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var ci = +handle.dataset.ci;
+        var th = document.querySelector('#st th[data-ci="' + ci + '"]');
+        if (!th) return;
+        var startX = e.clientX;
+        var startW = th.getBoundingClientRect().width;
+        function onMove(ev) {
+          var next = Math.max(60, Math.round(startW + (ev.clientX - startX)));
+          self.colWidths[ci] = next;
+          th.style.width = next + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          self.render();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      };
+    });
+    document.querySelectorAll('#st .row-resize-handle').forEach(function(handle) {
+      handle.onmousedown = function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var ri = +handle.dataset.ri;
+        var tr = handle.closest('tr');
+        if (!tr) return;
+        var startY = e.clientY;
+        var startH = tr.getBoundingClientRect().height;
+        function onMove(ev) {
+          var next = Math.max(24, Math.round(startH + (ev.clientY - startY)));
+          self.rowHeights[ri] = next;
+          tr.style.height = next + 'px';
+        }
+        function onUp() {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          self.render();
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      };
+    });
     document.querySelectorAll('#st th[data-ci]').forEach(function(th) {
       th.onclick = function() { self.sortBy(+th.dataset.ci); };
       th.ondblclick = function(e) { e.stopPropagation(); self.renameCol(+th.dataset.ci, th); };
@@ -1011,12 +1140,43 @@ var S = {
     var c2 = this.selEnd ? Math.max(this.sel.c, this.selEnd.c) : this.sel.c;
     this.clipboard = { data: this.data.slice(r1, r2+1).map(function(row){ return row.slice(c1, c2+1); }) };
     var txt = this.clipboard.data.map(function(r){ return r.join('\t'); }).join('\n');
-    if (navigator.clipboard) navigator.clipboard.writeText(txt).catch(function(){});
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(txt).catch(function(){});
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = txt;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+    }
     toast('Скопировано (' + (r2-r1+1) + '×' + (c2-c1+1) + ')');
   },
 
+  pasteText: function(text) {
+    text = String(text || '');
+    if (!text.trim()) return false;
+    var rows = text.replace(/\r/g, '').split('\n').filter(function(r){ return r.length > 0; });
+    if (!rows.length) return false;
+    this.clipboard = { data: rows.map(function(r){ return r.split('\t'); }) };
+    return true;
+  },
+
+  pasteFromSystem: async function() {
+    if (navigator.clipboard && window.isSecureContext && navigator.clipboard.readText) {
+      try {
+        var t = await navigator.clipboard.readText();
+        if (this.pasteText(t)) return this.paste();
+      } catch (_) {}
+    }
+    return this.paste();
+  },
+
   paste: function() {
-    if (!this.clipboard) { toast('Буфер пуст'); return; }
+    if (!this.clipboard || !this.clipboard.data || !this.clipboard.data.length) { toast('Буфер пуст'); return; }
     this.saveUndo();
     var self = this;
     this.clipboard.data.forEach(function(row, di){
@@ -1108,7 +1268,7 @@ var S = {
         case 'KeyY': e.preventDefault(); this.redo(); return;
         case 'KeyX': e.preventDefault(); this.cut(); return;
         case 'KeyC': e.preventDefault(); this.copy(); return;
-        case 'KeyV': e.preventDefault(); this.paste(); return;
+        case 'KeyV': e.preventDefault(); this.pasteFromSystem(); return;
         case 'KeyH': e.preventDefault(); this.findReplace(); return;
         case 'KeyK': e.preventDefault(); toast('Вставка ссылки доступна из меню Вставка'); return;
         case 'KeyA': e.preventDefault(); this.sel={r:0,c:0}; this.selEnd={r:R-1,c:C-1}; this.render(); return;
@@ -1383,8 +1543,18 @@ function initToolbar() {
 // ── SHEET KEYBOARD ────────────────────────────────────────────────────────────
 var sw = document.getElementById('sw');
 sw.addEventListener('keydown', function(e){ S.handleKey(e); });
+sw.addEventListener('scroll', function(){
+  if (sw.scrollTop + sw.clientHeight >= sw.scrollHeight - 80) loadMoreRows();
+});
 var ce = document.getElementById('ce');
 ce.addEventListener('keydown', function(e){ S.handleKey(e); });
+sw.addEventListener('paste', function(e){
+  if (S.editing) return;
+  var txt = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+  if (!txt) return;
+  e.preventDefault();
+  if (S.pasteText(txt)) S.paste();
+});
 ce.addEventListener('input', function(){
   ce.style.height = 'auto';
   ce.style.height = ce.scrollHeight + 'px';
@@ -1650,7 +1820,7 @@ function sendChat() {
   fetch(API_BASE + '/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg, current_table: currentTable, history: chatHistory })
+    body: JSON.stringify({ message: msg, current_table: currentTable, history: chatHistory, query_id: queryState.queryId })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -1670,13 +1840,18 @@ function sendChat() {
       return;
     }
     if (data.ai_message) { typeAiMessage(data.ai_message); pushHistory('ai', data.ai_message); }
+    if (data.query_id) queryState.queryId = data.query_id;
     if ((data.action === 'transform' || data.action === 'query') && data.table) {
       if (data.table.headers && data.table.rows) {
         S.saveUndo();
         S.headers = data.table.headers;
         S.data = data.table.rows.length ? data.table.rows : [new Array(data.table.headers.length).fill('')];
         S.sel = {r:0,c:0}; S.selEnd = null;
+        queryState.loadedRows = S.data.length;
+        queryState.totalRows = S.data.length;
+        queryState.loadingMore = false;
         S.render();
+        updateDataProgress();
         toast('Таблица обновлена');
       }
     }
@@ -1713,6 +1888,7 @@ document.getElementById('keysModal').addEventListener('click', function(e){
 initMenus();
 initToolbar();
 setZoom(100);
+resetQueryState();
 showView('auth');
 var initialAi = document.querySelector('#chatMsgs .msg.ai');
 if (initialAi) pushHistory('ai', initialAi.textContent || '');

@@ -45,6 +45,38 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
     return {r[1] for r in cur.fetchall()}
 
 
+def _searchable_text_columns(primary_columns: set[str]) -> list[str]:
+    """Колонки, по которым можно делать универсальный contains-поиск."""
+    preferred = [
+        "kfsr_name", "kcsr_name", "kvr_name", "kosgu_name",
+        "budget_name", "caption", "org_name", "dd_recipient_caption",
+        "source_file", "posting_date", "close_date",
+        "kfsr_code", "kcsr_raw", "kcsr_norm", "kvr_code", "kosgu_code",
+        "goal_code", "kvfo_code", "kvfo_name", "fund_source",
+        "reg_number", "con_number", "con_document_id",
+    ]
+    cols = [c for c in preferred if c in primary_columns]
+    # Подхватываем и другие текстовые поля по паттернам имени.
+    for c in sorted(primary_columns):
+        if c in cols:
+            continue
+        lc = c.lower()
+        if any(k in lc for k in ("name", "caption", "code", "source", "date", "number", "document", "org")):
+            cols.append(c)
+    return cols[:30]
+
+
+def _tokenize_query(text: str) -> list[str]:
+    stop = {
+        "дай", "мне", "все", "данные", "по", "за", "для", "где", "и", "или", "с", "на", "к", "от",
+        "это", "этот", "эта", "эти", "какие", "какой", "какая", "покажи", "связанные", "связано",
+        "нужны", "нужно", "нужен", "найди", "найти", "записи", "строки", "таблица", "таблицу",
+        "про", "поиск", "показателю", "показатель"
+    }
+    toks = re.findall(r"[a-zа-я0-9]+", (text or "").lower())
+    return [t for t in toks if len(t) >= 3 and t not in stop][:5]
+
+
 def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     """
     Выполнить JSON-план от GigaChat.
@@ -54,7 +86,8 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     filters = plan.get("filters", {})
     columns = plan.get("columns", [])
     joins = plan.get("joins", [])
-    limit = min(int(plan.get("limit", 2000)), 5000)
+    limit = min(int(plan.get("limit", 20000)), 200000)
+    offset = max(0, int(plan.get("offset", 0) or 0))
 
     # Валидация таблиц
     for t in sources:
@@ -167,6 +200,28 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         where_parts.append(f"{primary}.kfsr_code = ?")
         params.append(filters["kfsr_code_eq"])
 
+    if "kfsr_name_contains" in filters and "kfsr_name" in primary_columns:
+        where_parts.append(f"{primary}.kfsr_name LIKE ?")
+        params.append(f"%{filters['kfsr_name_contains']}%")
+
+    # Универсальный contains-поиск по набору текстовых полей (OR).
+    if "any_text_contains" in filters:
+        txt = str(filters.get("any_text_contains", "")).strip()
+        if txt:
+            text_cols = _searchable_text_columns(primary_columns)
+            if text_cols:
+                where_parts.append("(" + " OR ".join([f"{primary}.{c} LIKE ?" for c in text_cols]) + ")")
+                params.extend([f"%{txt}%"] * len(text_cols))
+
+    # Универсальный поиск по нескольким токенам (AND между токенами; OR по колонкам внутри токена).
+    if "any_text_contains_all" in filters:
+        vals = [str(v).strip() for v in filters.get("any_text_contains_all", []) if str(v).strip()]
+        text_cols = _searchable_text_columns(primary_columns)
+        if vals and text_cols:
+            for v in vals:
+                where_parts.append("(" + " OR ".join([f"{primary}.{c} LIKE ?" for c in text_cols]) + ")")
+                params.extend([f"%{v}%"] * len(text_cols))
+
     # Фильтр по месяцу через source_file (март -> март%, июнь -> июнь%)
     if "source_file_contains" in filters and "source_file" in primary_columns:
         where_parts.append(f"{primary}.source_file LIKE ?")
@@ -243,6 +298,7 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         {join_sql}
         {where_sql}
         LIMIT {limit}
+        OFFSET {offset}
     """
 
     try:
@@ -254,3 +310,101 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
         conn.close()
 
     return headers, rows
+
+
+def execute_plan_page(plan: dict, offset: int, page_size: int) -> tuple[list[str], list[list[Any]]]:
+    """Постраничное выполнение плана."""
+    p = dict(plan or {})
+    p["offset"] = max(0, int(offset or 0))
+    p["limit"] = max(1, min(int(page_size or 200), 5000))
+    return execute_plan(p)
+
+
+def count_plan_rows(plan: dict) -> int:
+    """
+    Приблизительный count для плана.
+    Использует тот же план без offset и с большим limit.
+    """
+    p = dict(plan or {})
+    p.pop("offset", None)
+    p["limit"] = 200000
+    _, rows = execute_plan(p)
+    return len(rows)
+
+
+def search_all_tables_any_text(query: str, total_limit: int = 3000) -> tuple[list[str], list[list[Any]]]:
+    """
+    Fallback: сквозной поиск по всем витринам.
+    Возвращает унифицированную таблицу с источником строки.
+    """
+    tokens = _tokenize_query(query)
+    if not tokens:
+        return [], []
+
+    conn = _get_conn()
+    out_headers = [
+        "source_table", "source_file", "budget_name", "caption",
+        "posting_date", "close_date",
+        "kfsr_code", "kfsr_name", "kcsr_raw", "kcsr_name", "kvr_code", "kosgu_code",
+        "org_name", "dd_recipient_caption",
+        "reg_number", "con_number",
+        "limit_amount", "spend_amount", "payments_execution", "platezhka_amount", "con_amount",
+    ]
+    rows_out: list[list[Any]] = []
+    per_table_limit = max(50, min(1000, total_limit // max(1, len(WHITELIST_TABLES))))
+
+    try:
+        for table in sorted(WHITELIST_TABLES):
+            cols = _table_columns(conn, table)
+            if not cols:
+                continue
+            text_cols = _searchable_text_columns(cols)
+            if not text_cols:
+                continue
+
+            where_parts = []
+            params: list[Any] = []
+            for tok in tokens:
+                where_parts.append("(" + " OR ".join([f"{table}.{c} LIKE ?" for c in text_cols]) + ")")
+                params.extend([f"%{tok}%"] * len(text_cols))
+            where_sql = " AND ".join(where_parts)
+
+            def pick(col: str) -> str:
+                return f"{table}.{col}" if col in cols else "''"
+
+            sql = f"""
+                SELECT
+                    '{table}' as source_table,
+                    {pick('source_file')} as source_file,
+                    {pick('budget_name')} as budget_name,
+                    {pick('caption')} as caption,
+                    {pick('posting_date')} as posting_date,
+                    {pick('close_date')} as close_date,
+                    {pick('kfsr_code')} as kfsr_code,
+                    {pick('kfsr_name')} as kfsr_name,
+                    {pick('kcsr_raw')} as kcsr_raw,
+                    {pick('kcsr_name')} as kcsr_name,
+                    {pick('kvr_code')} as kvr_code,
+                    {pick('kosgu_code')} as kosgu_code,
+                    {pick('org_name')} as org_name,
+                    {pick('dd_recipient_caption')} as dd_recipient_caption,
+                    {pick('reg_number')} as reg_number,
+                    {pick('con_number')} as con_number,
+                    {pick('limit_amount')} as limit_amount,
+                    {pick('spend_amount')} as spend_amount,
+                    {pick('payments_execution')} as payments_execution,
+                    {pick('platezhka_amount')} as platezhka_amount,
+                    {pick('con_amount')} as con_amount
+                FROM {table}
+                WHERE {where_sql}
+                LIMIT {per_table_limit}
+            """
+            cur = conn.execute(sql, params)
+            for row in cur.fetchall():
+                rows_out.append([str(v) if v is not None else "" for v in row])
+                if len(rows_out) >= total_limit:
+                    return out_headers, rows_out
+    finally:
+        conn.close()
+
+    return out_headers, rows_out
