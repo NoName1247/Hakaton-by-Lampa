@@ -298,6 +298,21 @@ body{min-height:100dvh;overflow:hidden;}
 .dot:nth-child(3){animation-delay:.4s;}
 @keyframes blink{0%,80%,100%{opacity:.25;transform:translateY(0);}40%{opacity:1;transform:translateY(-1px);}}
 .chat-foot{display:flex;gap:6px;padding:9px 11px;border-top:1px solid var(--border);}
+.chat-foot{flex-wrap:wrap;align-items:center;}
+.chat-selection-chips{display:flex;flex-wrap:wrap;gap:6px;width:100%;}
+.sel-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#eef3ff;border:1px solid #c8d7ff;color:#274a99;
+  border-radius:999px;padding:4px 8px;font-size:12px;
+}
+.sel-chip button{border:none;background:transparent;cursor:pointer;color:#3d4d7a;font-size:12px;line-height:1;}
+.selection-add-btn{
+  position:absolute;display:none;z-index:12;
+  border:1px solid #9db9ff;background:#e8f0ff;color:#174ea6;
+  border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;
+  box-shadow:0 6px 16px rgba(20,40,120,.16);
+}
+.selection-add-btn.show{display:inline-flex;}
 
 /* Analytics tab */
 .analytics-panel{
@@ -424,7 +439,6 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     Бюджетный аналитический конструктор
   </div>
   <div id="editorTools" style="display:none;display:contents;">
-    <button class="btn" id="btnBackPrompt" type="button">&#8592; Новый запрос</button>
     <button class="btn" id="btnUndoTop" type="button">&#8630; Назад</button>
     <button class="btn" id="btnRedoTop" type="button">&#8631; Вперед</button>
     <button class="btn" id="btnAnalytics" type="button">Аналитика</button>
@@ -502,6 +516,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     <div class="sheet-wrap" id="sw" tabindex="0">
       <table class="sheet-table" id="st"></table>
       <textarea id="ce" rows="1"></textarea>
+      <button class="selection-add-btn" id="btnAddSelection" type="button">Добавить в чат</button>
     </div>
     <div class="right-panel" id="chatPanel">
       <div class="panel-head">
@@ -512,6 +527,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
           <div class="msg ai">Привет! Я твой AI-ассистент для редактирования таблицы. Напиши, что изменить.</div>
         </div>
         <div class="chat-foot">
+          <div class="chat-selection-chips" id="chatSelectionChips"></div>
           <input class="inp" id="chatInp" placeholder="Команда для таблицы" autocomplete="off">
           <button class="btn primary" id="btnChatSend" type="button">Применить</button>
         </div>
@@ -535,8 +551,6 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     </div>
   </div>
   <div class="sheet-bottom-tabs">
-    <button class="sheet-tab-icon" type="button" title="Новая вкладка">+</button>
-    <button class="sheet-tab-icon" type="button" title="Меню вкладок">&#9776;</button>
     <button class="sheet-tab active" id="tabTable" type="button">Таблица</button>
     <button class="sheet-tab" id="tabAnalytics" type="button">Аналитика</button>
   </div>
@@ -664,6 +678,10 @@ function showView(id) {
   document.getElementById('editorTools').style.display = id === 'editor' ? 'contents' : 'none';
   document.getElementById('sheetMenubar').classList.remove('active');
   document.getElementById('sheetToolbar').classList.remove('active');
+  if (id !== 'editor') {
+    selectionDraft = null;
+    document.getElementById('btnAddSelection').classList.remove('show');
+  }
   if (id === 'editor') { S.render(); document.getElementById('sw').focus(); }
 }
 
@@ -681,18 +699,80 @@ function doLogin() {
 document.getElementById('btnLogin').addEventListener('click', doLogin);
 document.getElementById('fPass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
 document.getElementById('fEmail').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('fPass').focus(); });
-document.getElementById('btnBackPrompt').addEventListener('click', function(){
-  if (window.Analytics) Analytics.close();
-  resetQueryState();
-  showView('prompt');
-});
 document.getElementById('btnUndoTop').addEventListener('click', function(){ S.undo(); });
 document.getElementById('btnRedoTop').addEventListener('click', function(){ S.redo(); });
 
 // ── PROMPT ───────────────────────────────────────────────────────────────────
 var API_BASE = 'http://139.60.162.135:8000';
+var API_KEY = 'your_secret_api_key_for_lampa';
+var API_BASE_CANDIDATES = (function(){
+  var out = [];
+  out.push(window.location.origin + '/api');
+  out.push(window.location.protocol + '//' + window.location.hostname + ':8000');
+  out.push(API_BASE);
+  return out.filter(function(v, i, arr){ return !!v && arr.indexOf(v) === i; });
+})();
+var ACTIVE_API_BASE = null;
+
+function joinApiUrl(base, endpoint) {
+  if (base.slice(-1) === '/' && endpoint.slice(0, 1) === '/') return base.slice(0, -1) + endpoint;
+  if (base.slice(-1) !== '/' && endpoint.slice(0, 1) !== '/') return base + '/' + endpoint;
+  return base + endpoint;
+}
+
+function apiFetch(endpoint, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(options.headers || {})
+  };
+  
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
+  
+  const config = {
+    ...options,
+    headers: headers
+  };
+  
+  return fetch(API_BASE + endpoint, config)
+    .catch(err => {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        throw new Error('NETWORK_ERROR: Не удалось подключиться к серверу. Проверьте интернет и доступность API.');
+      }
+      throw err;
+    })
+    .then(async response => {
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { code: `HTTP_${response.status}`, detail: response.statusText };
+        }
+        
+        if (response.status === 401) {
+          throw new Error('AUTH_ERROR: Неверный API ключ. Проверьте конфигурацию.');
+        }
+        if (response.status === 403) {
+          throw new Error('CORS_ERROR: Доступ запрещен. Проверьте CORS настройки сервера.');
+        }
+        if (response.status === 429) {
+          throw new Error('RATE_LIMIT: Слишком много запросов. Подождите немного.');
+        }
+        
+        const detail = errorData.detail || errorData.message || 'Неизвестная ошибка';
+        throw new Error(`${errorData.code || 'API_ERROR'}: ${detail}`);
+      }
+      
+      return response;
+    });
+}
+
 var queryState = {
   queryId: null,
+  sessionId: null,
+  tableVersion: 0,
   totalRows: 0,
   loadedRows: 0,
   pageSize: 300,
@@ -708,6 +788,8 @@ function updateDataProgress() {
 
 function resetQueryState() {
   queryState.queryId = null;
+  queryState.sessionId = null;
+  queryState.tableVersion = 0;
   queryState.totalRows = 0;
   queryState.loadedRows = 0;
   queryState.pageSize = 300;
@@ -719,9 +801,8 @@ function loadMoreRows() {
   if (!queryState.queryId || queryState.loadingMore) return;
   if (queryState.loadedRows >= queryState.totalRows) return;
   queryState.loadingMore = true;
-  fetch(API_BASE + '/api/query/page', {
+  apiFetch('/api/query/page', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       query_id: queryState.queryId,
       offset: queryState.loadedRows,
@@ -731,17 +812,19 @@ function loadMoreRows() {
   .then(function(r){ return r.json(); })
   .then(function(data){
     queryState.loadingMore = false;
-    if (data.detail) return;
+    if (data.detail) { toast(String(data.detail || 'Не удалось загрузить следующую страницу')); return; }
     var rows = Array.isArray(data.rows) ? data.rows : [];
     if (!rows.length) return;
-    S.saveUndo();
     Array.prototype.push.apply(S.data, rows);
     queryState.loadedRows = S.data.length;
     queryState.totalRows = data.total_rows || queryState.totalRows;
     S.render();
     updateDataProgress();
   })
-  .catch(function(){ queryState.loadingMore = false; });
+  .catch(function(err){
+    queryState.loadingMore = false;
+    toast(err.message || 'Ошибка подгрузки данных. Повторите прокрутку.');
+  });
 }
 
 function goToEditorFromPrompt() {
@@ -751,9 +834,8 @@ function goToEditorFromPrompt() {
   btn.disabled = true;
   btn.textContent = 'Загрузка...';
   toast('Запрос обрабатывается...', 8000);
-  fetch(API_BASE + '/api/query', {
+  apiFetch('/api/query', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: v })
   })
   .then(function(r) { return r.json(); })
@@ -774,6 +856,8 @@ function goToEditorFromPrompt() {
       S.data = data.rows.length ? data.rows : [new Array(data.columns.length).fill('')];
       S.sel = {r:0,c:0}; S.selEnd = null;
       queryState.queryId = data.query_id || null;
+      queryState.sessionId = data.session_id || null;
+      queryState.tableVersion = data.table_version || 0;
       queryState.totalRows = data.total_rows || S.data.length;
       queryState.loadedRows = S.data.length;
       queryState.pageSize = data.page_size || 300;
@@ -870,15 +954,31 @@ var S = {
   ],
   colWidths: [],
   rowHeights: [],
+  virtualRowHeight: 28,
+  renderBuffer: 20,
+  visibleStart: 0,
+  visibleEnd: 0,
+  lastRenderStart: -1,
+  lastRenderEnd: -1,
+  delegatesBound: false,
+  scrollRaf: 0,
   sel: {r:0,c:0}, selEnd: null,
   editing: false, editR: 0, editC: 0, editOrig: '',
   mouseSelecting: false,
   undoStack: [], redoStack: [], clipboard: null,
   sortCol: -1, sortDir: 1,
 
+  getUndoLimit: function() {
+    var cells = this.data.length * Math.max(1, this.headers.length);
+    if (cells > 50000) return 8;
+    if (cells > 20000) return 15;
+    return 40;
+  },
+
   saveUndo: function() {
     this.undoStack.push({ data: JSON.parse(JSON.stringify(this.data)), headers: this.headers.slice() });
-    if (this.undoStack.length > 60) this.undoStack.shift();
+    var cap = this.getUndoLimit();
+    if (this.undoStack.length > cap) this.undoStack.shift();
     this.redoStack = [];
     document.getElementById('uHint').textContent = this.undoStack.length + ' изм.';
   },
@@ -894,12 +994,33 @@ var S = {
   redo: function() {
     if (!this.redoStack.length) { toast('Нечего повторять'); return; }
     this.undoStack.push({ data: JSON.parse(JSON.stringify(this.data)), headers: this.headers.slice() });
+    var cap = this.getUndoLimit();
+    if (this.undoStack.length > cap) this.undoStack.shift();
     var s = this.redoStack.pop(); this.data = s.data; this.headers = s.headers;
+    document.getElementById('uHint').textContent = this.undoStack.length ? this.undoStack.length+' изм.' : '';
     this.render(); toast('Повторено');
   },
 
-  render: function() {
-    var R = this.data.length, C = this.headers.length, i, j, row, cls, h = '';
+  render: function(force) {
+    if (force === undefined) force = true;
+    var R = this.data.length, C = this.headers.length, i, j, cls, h = '';
+    var wrap = document.getElementById('sw');
+    var scrollTop = wrap ? wrap.scrollTop : 0;
+    var viewH = wrap ? wrap.clientHeight : 600;
+    var start = Math.max(0, Math.floor(scrollTop / this.virtualRowHeight) - this.renderBuffer);
+    var visibleCount = Math.ceil(viewH / this.virtualRowHeight) + this.renderBuffer * 2 + 2;
+    var end = Math.min(R, start + visibleCount);
+    if (!force && this.lastRenderStart === start && this.lastRenderEnd === end) {
+      placeSelectionButton();
+      return;
+    }
+    this.lastRenderStart = start;
+    this.lastRenderEnd = end;
+    this.visibleStart = start;
+    this.visibleEnd = end;
+    var topPad = start * this.virtualRowHeight;
+    var bottomPad = Math.max(0, (R - end) * this.virtualRowHeight);
+
     h += '<thead><tr><th>#</th>';
     for (i = 0; i < C; i++) {
       var sc = this.sortCol === i ? (this.sortDir > 0 ? ' sa' : ' sd') : '';
@@ -907,7 +1028,8 @@ var S = {
       h += '<th class="' + sc.trim() + '" data-ci="' + i + '"' + w + '>' + escH(this.headers[i]) + '<span class="col-resize-handle" data-ci="' + i + '"></span></th>';
     }
     h += '</tr></thead><tbody>';
-    for (i = 0; i < R; i++) {
+    if (topPad > 0) h += '<tr class="vsp"><td style="height:' + topPad + 'px;"></td><td colspan="' + C + '"></td></tr>';
+    for (i = start; i < end; i++) {
       var rh = this.rowHeights[i] ? (' style="height:' + this.rowHeights[i] + 'px;"') : '';
       h += '<tr' + rh + '>';
       h += '<td><span class="ct">' + (i+1) + '</span><span class="row-resize-handle" data-ri="' + i + '"></span></td>';
@@ -919,10 +1041,12 @@ var S = {
       }
       h += '</tr>';
     }
+    if (bottomPad > 0) h += '<tr class="vsp"><td style="height:' + bottomPad + 'px;"></td><td colspan="' + C + '"></td></tr>';
     h += '</tbody>';
     document.getElementById('st').innerHTML = h;
     this.updateBar();
     this.bindTbl();
+    placeSelectionButton();
   },
 
   inRange: function(r, c) {
@@ -937,15 +1061,38 @@ var S = {
     document.getElementById('cVal').textContent = (this.data[this.sel.r] || [])[this.sel.c] || '';
   },
 
-  select: function(r, c, ext) {
+  applySelectionClasses: function() {
+    var self = this;
+    document.querySelectorAll('#st td[data-r]').forEach(function(td) {
+      var r = +td.dataset.r, c = +td.dataset.c;
+      td.classList.remove('sel', 'ir');
+      if (r === self.sel.r && c === self.sel.c) td.classList.add('sel');
+      else if (self.selEnd && self.inRange(r, c)) td.classList.add('ir');
+    });
+  },
+
+  ensureVisibleRow: function(r) {
+    var wrap = document.getElementById('sw');
+    if (!wrap) return;
+    var top = r * this.virtualRowHeight;
+    var bottom = top + this.virtualRowHeight;
+    if (top < wrap.scrollTop) wrap.scrollTop = top;
+    else if (bottom > wrap.scrollTop + wrap.clientHeight) wrap.scrollTop = bottom - wrap.clientHeight;
+  },
+
+  select: function(r, c, ext, opts) {
     var R = this.data.length, C = this.headers.length;
     r = Math.max(0, Math.min(R-1, r));
     c = Math.max(0, Math.min(C-1, c));
     if (ext) { this.selEnd = {r:r,c:c}; }
     else { this.sel = {r:r,c:c}; this.selEnd = null; }
+    if (opts && opts.skipRender) {
+      this.applySelectionClasses();
+      this.updateBar();
+      return;
+    }
+    this.ensureVisibleRow(r);
     this.render();
-    var td = document.querySelector('#st td[data-r="'+r+'"][data-c="'+c+'"]');
-    if (td) td.scrollIntoView({block:'nearest',inline:'nearest'});
   },
 
   cellRect: function(r, c) {
@@ -994,12 +1141,16 @@ var S = {
   },
 
   bindTbl: function() {
+    if (this.delegatesBound) return;
+    this.delegatesBound = true;
     var self = this;
-    document.querySelectorAll('#st .col-resize-handle').forEach(function(handle) {
-      handle.onmousedown = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var ci = +handle.dataset.ci;
+    var st = document.getElementById('st');
+
+    st.addEventListener('mousedown', function(e){
+      var colHandle = e.target.closest('.col-resize-handle');
+      if (colHandle) {
+        e.preventDefault(); e.stopPropagation();
+        var ci = +colHandle.dataset.ci;
         var th = document.querySelector('#st th[data-ci="' + ci + '"]');
         if (!th) return;
         var startX = e.clientX;
@@ -1016,14 +1167,13 @@ var S = {
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
-      };
-    });
-    document.querySelectorAll('#st .row-resize-handle').forEach(function(handle) {
-      handle.onmousedown = function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var ri = +handle.dataset.ri;
-        var tr = handle.closest('tr');
+        return;
+      }
+      var rowHandle = e.target.closest('.row-resize-handle');
+      if (rowHandle) {
+        e.preventDefault(); e.stopPropagation();
+        var ri = +rowHandle.dataset.ri;
+        var tr = rowHandle.closest('tr');
         if (!tr) return;
         var startY = e.clientY;
         var startH = tr.getBoundingClientRect().height;
@@ -1039,34 +1189,51 @@ var S = {
         }
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
-      };
-    });
-    document.querySelectorAll('#st th[data-ci]').forEach(function(th) {
-      th.onclick = function() { self.sortBy(+th.dataset.ci); };
-      th.ondblclick = function(e) { e.stopPropagation(); self.renameCol(+th.dataset.ci, th); };
-      th.oncontextmenu = function(e) {
-        e.preventDefault();
-        self.sel.c = +th.dataset.ci; self.render();
-        showCtx(e.clientX, e.clientY, null, +th.dataset.ci);
-      };
-    });
-    document.querySelectorAll('#st td[data-r]').forEach(function(td) {
-      td.onmousedown = function(e) {
-        if (e.button === 2) return;
+        return;
+      }
+      var td = e.target.closest('td[data-r]');
+      if (td && e.button !== 2) {
         self.mouseSelecting = true;
-        if (e.shiftKey) self.select(+td.dataset.r, +td.dataset.c, true);
-        else self.select(+td.dataset.r, +td.dataset.c);
-      };
-      td.onmouseover = function() {
-        if (!self.mouseSelecting || self.editing) return;
-        self.select(+td.dataset.r, +td.dataset.c, true);
-      };
-      td.ondblclick = function() { self.startEdit(+td.dataset.r, +td.dataset.c); };
-      td.oncontextmenu = function(e) {
+        if (e.shiftKey) self.select(+td.dataset.r, +td.dataset.c, true, {skipRender:true});
+        else self.select(+td.dataset.r, +td.dataset.c, false, {skipRender:true});
+      }
+    });
+
+    st.addEventListener('mouseover', function(e){
+      var td = e.target.closest('td[data-r]');
+      if (!td || !self.mouseSelecting || self.editing) return;
+      self.select(+td.dataset.r, +td.dataset.c, true, {skipRender:true});
+    });
+
+    st.addEventListener('dblclick', function(e){
+      var th = e.target.closest('th[data-ci]');
+      if (th) { e.stopPropagation(); self.renameCol(+th.dataset.ci, th); return; }
+      var td = e.target.closest('td[data-r]');
+      if (td) self.startEdit(+td.dataset.r, +td.dataset.c);
+    });
+
+    st.addEventListener('contextmenu', function(e){
+      var th = e.target.closest('th[data-ci]');
+      if (th) {
+        e.preventDefault();
+        self.sel.c = +th.dataset.ci;
+        self.render();
+        showCtx(e.clientX, e.clientY, null, +th.dataset.ci);
+        return;
+      }
+      var td = e.target.closest('td[data-r]');
+      if (td) {
         e.preventDefault();
         self.select(+td.dataset.r, +td.dataset.c);
         showCtx(e.clientX, e.clientY, +td.dataset.r, +td.dataset.c);
-      };
+      }
+    });
+
+    st.addEventListener('click', function(e){
+      var th = e.target.closest('th[data-ci]');
+      if (!th) return;
+      if (e.target.closest('.col-resize-handle')) return;
+      self.sortBy(+th.dataset.ci);
     });
   },
 
@@ -1544,6 +1711,12 @@ function initToolbar() {
 var sw = document.getElementById('sw');
 sw.addEventListener('keydown', function(e){ S.handleKey(e); });
 sw.addEventListener('scroll', function(){
+  if (!S.scrollRaf) {
+    S.scrollRaf = requestAnimationFrame(function(){
+      S.scrollRaf = 0;
+      S.render(false);
+    });
+  }
   if (sw.scrollTop + sw.clientHeight >= sw.scrollHeight - 80) loadMoreRows();
 });
 var ce = document.getElementById('ce');
@@ -1580,7 +1753,22 @@ document.addEventListener('mousedown', function(e){
   if (!ctxMenu.contains(e.target)) hideCtx();
 });
 document.addEventListener('mouseup', function(){
+  if (S.mouseSelecting && !S.editing) {
+    selectionDraft = getSelectionRange();
+    placeSelectionButton();
+  }
   S.mouseSelecting = false;
+});
+document.getElementById('btnAddSelection').addEventListener('click', function(){
+  if (!selectionDraft) return;
+  var key = [selectionDraft.r1, selectionDraft.c1, selectionDraft.r2, selectionDraft.c2].join(':');
+  var exists = chatSelectionClusters.some(function(cl){
+    return [cl.r1, cl.c1, cl.r2, cl.c2].join(':') === key;
+  });
+  if (!exists) chatSelectionClusters.push(serializeSelectionCluster(selectionDraft));
+  renderSelectionChips();
+  selectionDraft = null;
+  this.classList.remove('show');
 });
 document.getElementById('ctxCopy').onclick   = function(){ S.copy();          hideCtx(); };
 document.getElementById('ctxPaste').onclick  = function(){ S.paste();         hideCtx(); };
@@ -1639,11 +1827,73 @@ function addMsg(text, role) {
 }
 
 var chatHistory = [];
+var selectionDraft = null;
+var chatSelectionClusters = [];
 function pushHistory(role, text) {
   var t = String(text || '').trim();
   if (!t) return;
   chatHistory.push({ role: role, text: t });
   if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+}
+
+function getSelectionRange() {
+  var base = S.sel || { r: 0, c: 0 };
+  var end = S.selEnd || base;
+  var r1 = Math.min(base.r, end.r), r2 = Math.max(base.r, end.r);
+  var c1 = Math.min(base.c, end.c), c2 = Math.max(base.c, end.c);
+  return { r1: r1, c1: c1, r2: r2, c2: c2, range_label: colLetter(c1) + (r1 + 1) + ':' + colLetter(c2) + (r2 + 1) };
+}
+
+function serializeSelectionCluster(range) {
+  var headers = [];
+  for (var c = range.c1; c <= range.c2; c++) headers.push(S.headers[c] || ('Столбец ' + (c + 1)));
+  var rows = [];
+  var maxRows = Math.min(range.r2, range.r1 + 79);
+  for (var r = range.r1; r <= maxRows; r++) {
+    var row = [];
+    for (var cc = range.c1; cc <= range.c2; cc++) row.push((S.data[r] && S.data[r][cc]) || '');
+    rows.push(row);
+  }
+  return {
+    range_label: range.range_label,
+    r1: range.r1, c1: range.c1, r2: range.r2, c2: range.c2,
+    rows_truncated: (range.r2 - range.r1 + 1) > rows.length,
+    rows_sent: rows.length,
+    headers: headers,
+    rows: rows
+  };
+}
+
+function renderSelectionChips() {
+  var root = document.getElementById('chatSelectionChips');
+  root.innerHTML = '';
+  chatSelectionClusters.forEach(function(cl, idx){
+    var chip = document.createElement('div');
+    chip.className = 'sel-chip';
+    var label = document.createElement('span');
+    label.textContent = cl.range_label + (cl.rows_truncated ? ' (часть)' : '');
+    var rm = document.createElement('button');
+    rm.type = 'button';
+    rm.textContent = 'x';
+    rm.title = 'Удалить диапазон';
+    rm.addEventListener('click', function(){
+      chatSelectionClusters.splice(idx, 1);
+      renderSelectionChips();
+    });
+    chip.appendChild(label);
+    chip.appendChild(rm);
+    root.appendChild(chip);
+  });
+}
+
+function placeSelectionButton() {
+  var btn = document.getElementById('btnAddSelection');
+  if (!selectionDraft) { btn.classList.remove('show'); return; }
+  var rect = S.cellRect(selectionDraft.r1, selectionDraft.c1);
+  if (!rect) { btn.classList.remove('show'); return; }
+  btn.style.left = (rect.left + 6) + 'px';
+  btn.style.top = Math.max(6, rect.top - 34) + 'px';
+  btn.classList.add('show');
 }
 
 function addThinking() {
@@ -1816,11 +2066,34 @@ function sendChat() {
   var thinkingNode = addThinking();
 
   var currentTable = { headers: S.headers, rows: S.data };
+  
+  var hasSession = !!queryState.sessionId;
+  if (hasSession) {
+    currentTable = { headers: [], rows: [] };
+  }
+  
+  var selectionClustersPayload = chatSelectionClusters.map(function(cl){
+    return {
+      range_label: cl.range_label,
+      r1: cl.r1, c1: cl.c1, r2: cl.r2, c2: cl.c2,
+      rows_truncated: !!cl.rows_truncated,
+      rows_sent: cl.rows_sent || 0,
+      headers: cl.headers,
+      rows: cl.rows
+    };
+  });
 
-  fetch(API_BASE + '/api/chat', {
+  apiFetch('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg, current_table: currentTable, history: chatHistory, query_id: queryState.queryId })
+    body: JSON.stringify({
+      message: msg,
+      current_table: currentTable,
+      history: chatHistory,
+      query_id: queryState.queryId,
+      session_id: queryState.sessionId,
+      table_version: queryState.tableVersion,
+      selection_clusters: selectionClustersPayload
+    })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -1841,6 +2114,9 @@ function sendChat() {
     }
     if (data.ai_message) { typeAiMessage(data.ai_message); pushHistory('ai', data.ai_message); }
     if (data.query_id) queryState.queryId = data.query_id;
+    if (data.session_id) queryState.sessionId = data.session_id;
+    if (data.table_version !== undefined) queryState.tableVersion = data.table_version;
+    
     if ((data.action === 'transform' || data.action === 'query') && data.table) {
       if (data.table.headers && data.table.rows) {
         S.saveUndo();

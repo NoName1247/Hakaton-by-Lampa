@@ -29,20 +29,13 @@ def get_schema_context() -> str:
             if not cols:
                 continue
             col_str = ", ".join(f"{c[1]} ({c[2]})" for c in cols if c[1] != "id")
-            # Получить пример 1 строки для понимания данных
-            try:
-                sample = conn.execute(
-                    f"SELECT * FROM {table} WHERE kcsr_norm != '' LIMIT 1"
-                ).fetchone()
-            except Exception:
-                sample = conn.execute(f"SELECT * FROM {table} LIMIT 1").fetchone()
-
             lines.append(f"Таблица `{table}`:")
             lines.append(f"  Колонки: {col_str}")
-            if sample:
-                col_names = [c[1] for c in cols]
-                preview = {col_names[i]: str(sample[i])[:60] for i in range(min(8, len(sample)))}
-                lines.append(f"  Пример: {preview}")
+            try:
+                count = conn.execute(f"SELECT COUNT(1) FROM {table}").fetchone()[0]
+                lines.append(f"  Оценка объема: ~{count} строк")
+            except Exception:
+                pass
         except Exception as e:
             lines.append(f"Таблица `{table}`: ошибка — {e}")
     conn.close()

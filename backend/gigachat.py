@@ -14,6 +14,7 @@ GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTHORIZATION_KEY", "")
 GIGACHAT_SCOPE = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
 GIGACHAT_OAUTH_URL = os.getenv("GIGACHAT_OAUTH_URL", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+GIGACHAT_VERIFY_TLS = os.getenv("GIGACHAT_VERIFY_TLS", "true").strip().lower() in ("1", "true", "yes", "on")
 
 _token_cache: dict = {"access_token": "", "expires_at": 0}
 
@@ -32,7 +33,7 @@ def _get_token() -> str:
             "Authorization": f"Basic {GIGACHAT_AUTH_KEY}",
         },
         data={"scope": GIGACHAT_SCOPE},
-        verify=False,
+        verify=GIGACHAT_VERIFY_TLS,
         timeout=15,
     )
     resp.raise_for_status()
@@ -67,16 +68,30 @@ def chat(messages: list[dict], model: str = "GigaChat", temperature: float = 0.2
             GIGACHAT_API_URL,
             headers=headers,
             json=payload,
-            verify=False,
+            verify=GIGACHAT_VERIFY_TLS,
             timeout=60,
         )
         last_resp = resp
         if resp.status_code in (429, 502, 503, 504):
             continue
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        data = resp.json()
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("GigaChat вернул пустой ответ (choices).")
+        msg = (choices[0].get("message") or {}).get("content")
+        if msg is None:
+            raise RuntimeError("GigaChat вернул ответ без content.")
+        return str(msg)
 
     # Если все попытки исчерпаны — поднимаем исходную ошибку.
     assert last_resp is not None
     last_resp.raise_for_status()
-    return last_resp.json()["choices"][0]["message"]["content"]
+    data = last_resp.json()
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("GigaChat вернул пустой ответ (choices).")
+    msg = (choices[0].get("message") or {}).get("content")
+    if msg is None:
+        raise RuntimeError("GigaChat вернул ответ без content.")
+    return str(msg)

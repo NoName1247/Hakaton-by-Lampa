@@ -77,6 +77,22 @@ def _tokenize_query(text: str) -> list[str]:
     return [t for t in toks if len(t) >= 3 and t not in stop][:5]
 
 
+def _safe_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _date_ddmmyyyy_to_iso(value: str) -> str | None:
+    s = str(value or "").strip()
+    m = re.match(r"^(\d{2})\.(\d{2})\.(\d{4})$", s)
+    if not m:
+        return None
+    dd, mm, yyyy = m.group(1), m.group(2), m.group(3)
+    return f"{yyyy}-{mm}-{dd}"
+
+
 def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     """
     Выполнить JSON-план от GigaChat.
@@ -86,8 +102,8 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     filters = plan.get("filters", {})
     columns = plan.get("columns", [])
     joins = plan.get("joins", [])
-    limit = min(int(plan.get("limit", 20000)), 200000)
-    offset = max(0, int(plan.get("offset", 0) or 0))
+    limit = min(_safe_int(plan.get("limit", 20000), 20000), 200000)
+    offset = max(0, _safe_int(plan.get("offset", 0) or 0, 0))
 
     # Валидация таблиц
     for t in sources:
@@ -255,13 +271,21 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
 
     if "date_from" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
         date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
-        where_parts.append(f"{primary}.{date_col} >= ?")
-        params.append(filters["date_from"])
+        date_from_iso = _date_ddmmyyyy_to_iso(filters["date_from"])
+        if date_from_iso:
+            where_parts.append(
+                f"(substr({primary}.{date_col}, 7, 4) || '-' || substr({primary}.{date_col}, 4, 2) || '-' || substr({primary}.{date_col}, 1, 2)) >= ?"
+            )
+            params.append(date_from_iso)
 
     if "date_to" in filters and ("posting_date" in primary_columns or "close_date" in primary_columns):
         date_col = "posting_date" if primary in ("mart_rchb", "mart_buau") else "close_date"
-        where_parts.append(f"{primary}.{date_col} <= ?")
-        params.append(filters["date_to"])
+        date_to_iso = _date_ddmmyyyy_to_iso(filters["date_to"])
+        if date_to_iso:
+            where_parts.append(
+                f"(substr({primary}.{date_col}, 7, 4) || '-' || substr({primary}.{date_col}, 4, 2) || '-' || substr({primary}.{date_col}, 1, 2)) <= ?"
+            )
+            params.append(date_to_iso)
 
     # Фильтр по % освоения для таблиц, где есть limit_amount + spend_amount
     # execution_percent = spend_amount / limit_amount * 100
@@ -315,8 +339,8 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
 def execute_plan_page(plan: dict, offset: int, page_size: int) -> tuple[list[str], list[list[Any]]]:
     """Постраничное выполнение плана."""
     p = dict(plan or {})
-    p["offset"] = max(0, int(offset or 0))
-    p["limit"] = max(1, min(int(page_size or 200), 5000))
+    p["offset"] = max(0, _safe_int(offset or 0, 0))
+    p["limit"] = max(1, min(_safe_int(page_size or 200, 200), 5000))
     return execute_plan(p)
 
 

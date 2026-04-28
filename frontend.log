@@ -211,3 +211,40 @@ ConnectionResetError: [Errno 104] Connection reset by peer
 176.104.142.81 - - [28/Apr/2026 20:15:30] "GET /favicon.ico HTTP/1.1" 404 -
 5.61.209.107 - - [28/Apr/2026 20:20:19] code 404, message File not found
 5.61.209.107 - - [28/Apr/2026 20:20:19] "GET /SDK/webLanguage HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 20:32:00] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 20:32:01] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 20:32:01] "GET /favicon.ico HTTP/1.1" 404 -
+176.65.139.254 - - [28/Apr/2026 20:36:07] code 404, message File not found
+176.65.139.254 - - [28/Apr/2026 20:36:07] "GET /login HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 21:11:01] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 21:11:02] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 21:11:02] "GET /favicon.ico HTTP/1.1" 404 -
+----------------------------------------
+Exception occurred during processing of request from ('193.124.203.230', 62018)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/http/server.py", line 1311, in finish_request
+    self.RequestHandlerClass(request, client_address, self,
+  File "/usr/lib/python3.12/http/server.py", line 672, in __init__
+    super().__init__(*args, **kwargs)
+  File "/usr/lib/python3.12/socketserver.py", line 761, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+176.104.142.81 - - [28/Apr/2026 21:14:27] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 21:14:28] "GET /favicon.ico HTTP/1.1" 404 -
+205.210.31.178 - - [28/Apr/2026 21:16:05] code 400, message Bad request version ('À\\x13À')
+205.210.31.178 - - [28/Apr/2026 21:16:40] "\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03ÅÛ\x04z5ñ^@¥ e;ß:î\x16\x87è,H-\x8d)\x09ôi\x9d\x9dBô¸' GÂy³\x89qÑâ\x10$åÕÜ\x90@9ÁO½ôt03Ty\x0dæï\x9e×ß\x1b\x00&À+À/À,À0Ì©Ì¨À\x09À\x13À" 400 -
+205.210.31.178 - - [28/Apr/2026 21:17:35] code 400, message Bad HTTP/0.9 request type ("\\x16\\x03\\x01\\x00Ê\\x01\\x00\\x00Æ\\x03\\x03³\\x82\\x14\\x1a{Vgéï+\\x9b\\x16ã´¶Æ.¶UÍ'Æ\\x96äÃðeâêWÕ¾\\x00\\x00hÌ\\x14Ì\\x13À/À+À0À,À\\x11À\\x07À'À#À\\x13À")
+205.210.31.178 - - [28/Apr/2026 21:19:48] "\x16\x03\x01\x00Ê\x01\x00\x00Æ\x03\x03³\x82\x14\x1a{Vgéï+\x9b\x16ã´¶Æ.¶UÍ'Æ\x96äÃðeâêWÕ¾\x00\x00hÌ\x14Ì\x13À/À+À0À,À\x11À\x07À'À#À\x13À\x09À(À$À\x14À" 400 -
+176.65.139.254 - - [28/Apr/2026 22:08:23] code 404, message File not found
+176.65.139.254 - - [28/Apr/2026 22:08:23] "GET /login HTTP/1.1" 404 -
