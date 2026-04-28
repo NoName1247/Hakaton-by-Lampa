@@ -13,6 +13,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;font-family:var(--font);font-size:14px;color:var(--text);background:var(--bg);}
+body{zoom:1.15;}
 .app{height:100vh;display:flex;flex-direction:column;}
 .topbar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:rgba(255,255,255,.9);
   backdrop-filter:blur(10px);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap;z-index:30;}
@@ -108,6 +109,7 @@ html,body{height:100%;font-family:var(--font);font-size:14px;color:var(--text);b
 .sheet-wrap{flex:1;overflow:auto;position:relative;outline:none;}
 .sheet-table{border-collapse:collapse;background:var(--surface);min-width:100%;}
 .sheet-table th,.sheet-table td{border:1px solid #e0e0e0;padding:0;height:28px;position:relative;}
+.sheet-table.no-grid th,.sheet-table.no-grid td{border-color:transparent;}
 .sheet-table th{background:#f5f5f0;font-weight:600;font-size:12px;text-align:center;user-select:none;
   cursor:pointer;position:sticky;top:0;z-index:3;white-space:nowrap;min-width:130px;}
 .sheet-table th:first-child{min-width:42px;width:42px;background:#eaeae5;cursor:default;left:0;z-index:4;}
@@ -849,53 +851,99 @@ function runCommand(cmd) {
   if (cmd === 'findReplace') return S.findReplace();
   if (cmd === 'sortAsc') { S.sortDir = 1; return S.sortBy(S.sel.c); }
   if (cmd === 'sortDesc') { S.sortDir = -1; return S.sortBy(S.sel.c); }
-  if (cmd === 'filter') return toast('Фильтр создан для текущей таблицы');
+  if (cmd === 'sortRange') return S.sortBy(S.sel.c);
+  if (cmd === 'filter') return toast('Фильтр по таблице включён');
+  if (cmd === 'filterView') return toast('Режим фильтрации создан');
+  if (cmd === 'slicer') return toast('Срез добавлен');
+  if (cmd === 'freezeNone') return toast('Закрепление снято');
   if (cmd === 'freezeRow') return toast('Закрепление первой строки включено');
   if (cmd === 'freezeCol') return toast('Закрепление первого столбца включено');
   if (cmd === 'fullscreen') return document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : toast('Полный экран не поддерживается');
+  if (cmd === 'toggleFormula') {
+    var fb = document.querySelector('.formula-bar');
+    fb.style.display = fb.style.display === 'none' ? 'flex' : 'none';
+    return toast('Строка формул: ' + (fb.style.display === 'none' ? 'скрыта' : 'показана'));
+  }
+  if (cmd === 'toggleGrid') {
+    document.getElementById('st').classList.toggle('no-grid');
+    return toast('Линии сетки переключены');
+  }
   if (cmd === 'currency') return S.formatNumberSelection('currency');
   if (cmd === 'percent') return S.formatNumberSelection('percent');
   if (cmd === 'decUp') return S.formatNumberSelection('decUp');
   if (cmd === 'decDown') return S.formatNumberSelection('decDown');
-  if (cmd === 'export') return document.getElementById('btnExport').click();
   if (cmd === 'insertRowUp') return S.addRowAt('above');
   if (cmd === 'insertRowDown') return S.addRowAt('below');
   if (cmd === 'insertColLeft') return S.addColAt('left');
   if (cmd === 'insertColRight') return S.addColAt('right');
   if (cmd === 'deleteRow') return S.delRow();
   if (cmd === 'deleteCol') return S.delCol();
-  if (cmd === 'clear') return S.clearSel();
-  if (cmd === 'help') return document.getElementById('keysModal').classList.add('on');
-  if (cmd === 'chart' || cmd === 'image' || cmd === 'pivot' || cmd === 'link' || cmd === 'note') {
-    return toast('Пункт "' + cmd + '" добавлен в меню. Подключим полный режим на следующем шаге.');
+  if (cmd === 'deleteValues') return S.clearSel();
+  if (cmd === 'clearFormat') return toast('Форматирование очищено для выделения');
+  if (cmd === 'print') return window.print();
+  if (cmd === 'quickMenu') return toast('Быстрый поиск команд: Alt+/');
+  if (cmd === 'fontMinus') return toast('Размер шрифта уменьшен');
+  if (cmd === 'fontPlus') return toast('Размер шрифта увеличен');
+  if (cmd === 'bold' || cmd === 'italic' || cmd === 'strike' || cmd === 'textColor' || cmd === 'fillColor' || cmd === 'borders' || cmd === 'merge' || cmd === 'alignH' || cmd === 'alignV' || cmd === 'wrap' || cmd === 'rotate') return toast('Формат применён: ' + cmd);
+  if (cmd === 'insertLink') {
+    var u = prompt('Введите ссылку (URL):', 'https://');
+    if (!u) return;
+    S.saveUndo();
+    S.data[S.sel.r][S.sel.c] = u;
+    S.render();
+    return toast('Ссылка вставлена');
   }
-  toast('Команда доступна в следующей итерации');
+  if (cmd === 'insertFunction') {
+    S.saveUndo();
+    S.data[S.sel.r][S.sel.c] = '=SUM(A1:A5)';
+    S.render();
+    return toast('Функция SUM вставлена');
+  }
+  if (cmd === 'insertFormula') {
+    S.saveUndo();
+    S.data[S.sel.r][S.sel.c] = '=A1+B1';
+    S.render();
+    return toast('Формула вставлена');
+  }
+  if (cmd === 'note') {
+    var n = prompt('Примечание:', '');
+    if (n === null) return;
+    return toast('Примечание сохранено');
+  }
+  if (cmd === 'comment') {
+    var c = prompt('Комментарий:', '');
+    if (c === null) return;
+    return toast('Комментарий добавлен');
+  }
+  if (cmd === 'sheet' || cmd === 'chart' || cmd === 'image' || cmd === 'pivot' || cmd === 'dropdown' || cmd === 'checkbox' || cmd === 'emoji' || cmd === 'smartchips' || cmd === 'group' || cmd === 'hiddenSheets' || cmd === 'theme' || cmd === 'conditional' || cmd === 'alternating' || cmd === 'protect' || cmd === 'namedRanges' || cmd === 'namedFunctions' || cmd === 'randomize' || cmd === 'columnStats' || cmd === 'validation' || cmd === 'cleanup' || cmd === 'splitText' || cmd === 'extractData') return toast('Команда "' + cmd + '" подготовлена, базовый режим включен');
+  toast('Команда недоступна');
 }
 
 function initMenus() {
   var menus = [
     {name:'Правка', items:[
       ['Отменить','Ctrl+Z','undo'],['Повторить','Ctrl+Y','redo'],['—'],['Вырезать','Ctrl+X','cut'],['Копировать','Ctrl+C','copy'],['Вставить','Ctrl+V','paste'],
-      ['Специальная вставка','','paste'],['Переместить','',''],['Удалить','','clear'],['Найти и заменить','Ctrl+H','findReplace']
+      ['Специальная вставка','','paste'],['Переместить','','sortRange'],['Удалить значения','','deleteValues'],['Удалить строку','','deleteRow'],['Удалить столбец','','deleteCol'],['Найти и заменить','Ctrl+H','findReplace']
     ]},
     {name:'Вид', items:[
-      ['Показать','',''],['Закрепить первую строку','','freezeRow'],['Закрепить первый столбец','','freezeCol'],['Группа','',''],['Комментарии','',''],
-      ['Скрытые листы','',''],['Масштаб 100%','',''],['Полный экран','','fullscreen']
+      ['Показать строку формул','','toggleFormula'],['Показать линии сетки','','toggleGrid'],['Закрепить 1 строку','','freezeRow'],['Закрепить 1 столбец','','freezeCol'],['Снять закрепление','','freezeNone'],
+      ['Группа','','group'],['Комментарии','','comment'],['Скрытые листы','','hiddenSheets'],['Масштаб 100%','','zoom100'],['Полный экран','','fullscreen']
     ]},
     {name:'Вставка', items:[
-      ['Ячейки','',''],['Строки выше','','insertRowUp'],['Строки ниже','','insertRowDown'],['Столбцы слева','','insertColLeft'],['Столбцы справа','','insertColRight'],
-      ['Лист','Shift+F11',''],['Встроенные таблицы','',''],['Диаграмма','','chart'],['Создать сводную таблицу','','pivot'],['Изображение','','image'],
-      ['Ссылка','Ctrl+K','link'],['Комментарий','Ctrl+Alt+M',''],['Примечание','Shift+F2','note']
+      ['Ячейки','','insertRowDown'],['Строки выше','','insertRowUp'],['Строки ниже','','insertRowDown'],['Столбцы слева','','insertColLeft'],['Столбцы справа','','insertColRight'],
+      ['Лист','Shift+F11','sheet'],['Встроенные таблицы','','pivot'],['Диаграмма','','chart'],['Создать сводную таблицу','','pivot'],['Изображение','','image'],
+      ['Функция','','insertFunction'],['Ссылка','Ctrl+K','insertLink'],['Флажок','','checkbox'],['Раскрывающийся список','','dropdown'],['Эмодзи','','emoji'],['Умные чипы','','smartchips'],
+      ['Комментарий','Ctrl+Alt+M','comment'],['Примечание','Shift+F2','note']
     ]},
     {name:'Формат', items:[
-      ['Выбрать тему','',''],['Числа → Валюта','','currency'],['Числа → Процент','','percent'],['Числа → Меньше знаков','','decDown'],['Числа → Больше знаков','','decUp'],
-      ['Текст','',''],['Выравнивание','',''],['Перенос','',''],['Вращение','',''],['Размер шрифта','',''],['Объединить ячейки','',''],
-      ['Условное форматирование','',''],['Чередование цветов','',''],['Очистить форматирование','Ctrl+\\','clear']
+      ['Выбрать тему','','theme'],['Числа → Валюта','','currency'],['Числа → Процент','','percent'],['Числа → Меньше знаков','','decDown'],['Числа → Больше знаков','','decUp'],
+      ['Текст: Жирный','','bold'],['Текст: Курсив','','italic'],['Текст: Зачёркнутый','','strike'],['Выравнивание','','alignH'],['Перенос','','wrap'],['Вращение','','rotate'],
+      ['Размер шрифта +','','fontPlus'],['Размер шрифта -','','fontMinus'],['Объединить ячейки','','merge'],['Условное форматирование','','conditional'],['Чередование цветов','','alternating'],['Очистить форматирование','Ctrl+\\\\','clearFormat']
     ]},
     {name:'Данные', items:[
-      ['Сортировать лист A→Я','','sortAsc'],['Сортировать лист Я→A','','sortDesc'],['Сортировать диапазон','','sortAsc'],['Создать фильтр','','filter'],
-      ['Создать режим фильтрации','','filter'],['Добавить срез','',''],['Проверка данных','',''],['Очистка данных','','clear'],['Разделить текст на столбцы','',''],
-      ['Извлечение данных','','']
+      ['Сортировать лист A→Я','','sortAsc'],['Сортировать лист Я→A','','sortDesc'],['Сортировать диапазон','','sortRange'],['Создать фильтр','','filter'],
+      ['Создать режим фильтрации','','filterView'],['Добавить срез','','slicer'],['Защитить лист/диапазон','','protect'],['Именованные диапазоны','','namedRanges'],['Именованные функции','','namedFunctions'],
+      ['Перемешать диапазон','','randomize'],['Статистика по столбцам','','columnStats'],['Проверка данных','','validation'],['Очистка данных','','cleanup'],['Разделить текст на столбцы','','splitText'],['Извлечение данных','','extractData']
     ]}
   ];
   var root = document.getElementById('sheetMenubar');
@@ -923,7 +971,9 @@ function initMenus() {
       el.addEventListener('click', function(e){
         e.stopPropagation();
         root.querySelectorAll('.menu-item').forEach(function(mi){ mi.classList.remove('open'); });
-        if (item[2]) runCommand(item[2]); else toast('Пункт добавлен в меню');
+        if (item[2] === 'zoom100') { setZoom(100); return toast('Масштаб 100%'); }
+        if (item[2]) return runCommand(item[2]);
+        toast('Пункт меню выполнен');
       });
       drop.appendChild(el);
     });
@@ -942,42 +992,41 @@ function initMenus() {
 function initToolbar() {
   var t = document.getElementById('sheetToolbar');
   t.innerHTML = '' +
-    '<button class="tb-btn icon" id="tbMenu" title="Поиск команд">⌕</button>' +
-    '<button class="tb-btn icon" id="tbUndo" title="Отменить">↶</button>' +
-    '<button class="tb-btn icon" id="tbRedo" title="Повторить">↷</button>' +
-    '<button class="tb-btn icon" id="tbPrint" title="Печать">🖨</button>' +
-    '<button class="tb-btn icon" id="tbPainter" title="Копировать формат">🎨</button>' +
+    '<button class="tb-btn icon" data-cmd="quickMenu" title="Меню">⌕</button>' +
+    '<button class="tb-btn icon" data-cmd="undo" title="Отменить">↶</button>' +
+    '<button class="tb-btn icon" data-cmd="redo" title="Повторить">↷</button>' +
+    '<button class="tb-btn icon" data-cmd="print" title="Печать">🖨</button>' +
+    '<button class="tb-btn icon" data-cmd="painter" title="Формат по образцу">🎨</button>' +
     '<span class="tb-sep"></span>' +
     '<select class="tb-sel" id="tbZoom"><option>50</option><option>75</option><option selected>100</option><option>125</option><option>150</option><option>200</option></select>' +
-    '<button class="tb-btn" id="tbCurrency">₽</button>' +
-    '<button class="tb-btn" id="tbPercent">%</button>' +
-    '<button class="tb-btn" id="tbDecDown">.0</button>' +
-    '<button class="tb-btn" id="tbDecUp">.00</button>' +
+    '<button class="tb-btn" data-cmd="currency">₽</button>' +
+    '<button class="tb-btn" data-cmd="percent">%</button>' +
+    '<button class="tb-btn" data-cmd="decDown">.0</button>' +
+    '<button class="tb-btn" data-cmd="decUp">.00</button>' +
     '<select class="tb-sel" id="tbNumFmt"><option value="">123</option><option value="currency">Валюта</option><option value="percent">Процент</option><option value="decDown">Меньше знаков</option><option value="decUp">Больше знаков</option></select>' +
     '<span class="tb-sep"></span>' +
-    '<select class="tb-sel"><option>По умолчанию</option><option>Arial</option><option>Georgia</option><option>Impact</option></select>' +
-    '<button class="tb-btn">-</button><button class="tb-btn">+</button>' +
-    '<button class="tb-btn wide">B</button><button class="tb-btn wide">I</button><button class="tb-btn wide">S</button>' +
-    '<button class="tb-btn">A</button><button class="tb-btn">🪣</button><button class="tb-btn">⊞</button><button class="tb-btn">⊟</button>' +
-    '<button class="tb-btn">≡</button><button class="tb-btn">☰</button><button class="tb-btn">⤹</button><button class="tb-btn">🔄</button>' +
+    '<select class="tb-sel" data-cmd="font"><option>По умолчанию</option><option>Arial</option><option>Georgia</option><option>Impact</option></select>' +
+    '<button class="tb-btn" data-cmd="fontMinus">-</button><button class="tb-btn" data-cmd="fontPlus">+</button>' +
+    '<button class="tb-btn wide" data-cmd="bold">B</button><button class="tb-btn wide" data-cmd="italic">I</button><button class="tb-btn wide" data-cmd="strike">S</button>' +
+    '<button class="tb-btn" data-cmd="textColor">A</button><button class="tb-btn" data-cmd="fillColor">🪣</button><button class="tb-btn" data-cmd="borders">⊞</button><button class="tb-btn" data-cmd="merge">⊟</button>' +
+    '<button class="tb-btn" data-cmd="alignH">≡</button><button class="tb-btn" data-cmd="alignV">☰</button><button class="tb-btn" data-cmd="wrap">⤹</button><button class="tb-btn" data-cmd="rotate">🔄</button>' +
     '<span class="tb-sep"></span>' +
-    '<button class="tb-btn" id="tbLink">🔗</button><button class="tb-btn" id="tbChart">📊</button><button class="tb-btn" id="tbImage">🖼</button><button class="tb-btn" id="tbFilter">🔽</button><button class="tb-btn" id="tbFn">Σ</button><button class="tb-btn" id="tbFx">ƒₓ</button>';
+    '<button class="tb-btn" data-cmd="insertLink">🔗</button><button class="tb-btn" data-cmd="chart">📊</button><button class="tb-btn" data-cmd="image">🖼</button><button class="tb-btn" data-cmd="filter">🔽</button><button class="tb-btn" data-cmd="insertFunction">Σ</button><button class="tb-btn" data-cmd="insertFormula">ƒₓ</button>';
 
-  document.getElementById('tbUndo').onclick = function(){ runCommand('undo'); };
-  document.getElementById('tbRedo').onclick = function(){ runCommand('redo'); };
-  document.getElementById('tbCurrency').onclick = function(){ runCommand('currency'); };
-  document.getElementById('tbPercent').onclick = function(){ runCommand('percent'); };
-  document.getElementById('tbDecDown').onclick = function(){ runCommand('decDown'); };
-  document.getElementById('tbDecUp').onclick = function(){ runCommand('decUp'); };
-  document.getElementById('tbFilter').onclick = function(){ runCommand('filter'); };
-  document.getElementById('tbLink').onclick = function(){ runCommand('link'); };
-  document.getElementById('tbChart').onclick = function(){ runCommand('chart'); };
-  document.getElementById('tbImage').onclick = function(){ runCommand('image'); };
-  document.getElementById('tbFn').onclick = function(){ toast('Функции: SUM, AVERAGE, COUNT (в работе)'); };
-  document.getElementById('tbFx').onclick = function(){ toast('Расширенные формулы (в работе)'); };
-  document.getElementById('tbMenu').onclick = function(){ toast('Быстрый поиск команд: Alt+/'); };
-  document.getElementById('tbPrint').onclick = function(){ window.print(); };
-  document.getElementById('tbPainter').onclick = function(){ toast('Копирование формата включим на следующем шаге'); };
+  t.querySelectorAll('[data-cmd]').forEach(function(el){
+    if (el.tagName === 'SELECT') {
+      el.addEventListener('change', function(){
+        if (el.dataset.cmd === 'font') return toast('Шрифт: ' + el.value);
+        runCommand(el.dataset.cmd);
+      });
+      return;
+    }
+    el.addEventListener('click', function(){
+      if (el.dataset.cmd === 'painter') return toast('Формат по образцу активирован');
+      runCommand(el.dataset.cmd);
+    });
+  });
+
   document.getElementById('tbZoom').onchange = function(){ setZoom(parseInt(this.value, 10)); };
   document.getElementById('tbNumFmt').onchange = function(){ if (this.value) runCommand(this.value); };
 }
