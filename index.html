@@ -1468,6 +1468,14 @@ function addMsg(text, role) {
   return d;
 }
 
+var chatHistory = [];
+function pushHistory(role, text) {
+  var t = String(text || '').trim();
+  if (!t) return;
+  chatHistory.push({ role: role, text: t });
+  if (chatHistory.length > 40) chatHistory = chatHistory.slice(-40);
+}
+
 function addThinking() {
   var d = document.createElement('div');
   d.className = 'msg ai thinking';
@@ -1631,6 +1639,7 @@ function sendChat() {
   var inp = document.getElementById('chatInp');
   var msg = inp.value.trim(); if (!msg) return;
   addMsg(msg, 'user'); inp.value = '';
+  pushHistory('user', msg);
 
   var sendBtn = document.getElementById('btnChatSend');
   sendBtn.disabled = true; sendBtn.textContent = '...';
@@ -1641,7 +1650,7 @@ function sendChat() {
   fetch(API_BASE + '/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg, current_table: currentTable })
+    body: JSON.stringify({ message: msg, current_table: currentTable, history: chatHistory })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -1650,13 +1659,17 @@ function sendChat() {
     if (data.detail) {
       var d2 = String(data.detail || '');
       if (d2.toLowerCase().indexOf('no such column') !== -1 || d2.toLowerCase().indexOf('не найден') !== -1) {
-        typeAiMessage('Данные не найдены. Попробуйте сформулировать команду по-другому.');
+        var e1 = 'Данные не найдены. Попробуйте сформулировать команду по-другому.';
+        typeAiMessage(e1);
+        pushHistory('ai', e1);
       } else {
-        typeAiMessage('Ошибка: ' + d2);
+        var e2 = 'Ошибка: ' + d2;
+        typeAiMessage(e2);
+        pushHistory('ai', e2);
       }
       return;
     }
-    if (data.ai_message) typeAiMessage(data.ai_message);
+    if (data.ai_message) { typeAiMessage(data.ai_message); pushHistory('ai', data.ai_message); }
     if ((data.action === 'transform' || data.action === 'query') && data.table) {
       if (data.table.headers && data.table.rows) {
         S.saveUndo();
@@ -1671,7 +1684,9 @@ function sendChat() {
   .catch(function(err) {
     sendBtn.disabled = false; sendBtn.textContent = 'Применить';
     if (thinkingNode && thinkingNode.parentNode) thinkingNode.parentNode.removeChild(thinkingNode);
-    typeAiMessage('Ошибка соединения: ' + err.message);
+    var e3 = 'Ошибка соединения: ' + err.message;
+    typeAiMessage(e3);
+    pushHistory('ai', e3);
   });
 }
 
@@ -1699,6 +1714,8 @@ initMenus();
 initToolbar();
 setZoom(100);
 showView('auth');
+var initialAi = document.querySelector('#chatMsgs .msg.ai');
+if (initialAi) pushHistory('ai', initialAi.textContent || '');
 </script>
 </body>
 </html>

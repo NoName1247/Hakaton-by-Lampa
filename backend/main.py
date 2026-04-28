@@ -20,6 +20,7 @@ class QueryRequest(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     current_table: dict
+    history: Optional[list[dict]] = None
 
 COLUMN_LABELS = {
     "kcsr_raw":"КЦСР","kcsr_norm":"КЦСР (норм.)","kcsr_name":"Наименование КЦСР",
@@ -190,6 +191,100 @@ def _is_greeting(text: str) -> bool:
     t = (text or "").strip().lower()
     t = re.sub(r"[!?.;,:\s]+$", "", t)
     return any(t == g or t.startswith(g + " ") for g in GREETING_MARKERS)
+
+
+TABLE_EDIT_MARKERS = (
+    "добав", "удали", "убери", "очист", "отсорт", "переимен", "заполни",
+    "поставь", "вставь", "сделай", "создай", "оставь", "покажи таблиц",
+    "фильтр", "строк", "столб", "колонк", "яче", "транспони", "сумм",
+    "средн", "медиан", "максим", "миним", "ранг", "процент освоения",
+)
+
+
+def _is_question_text(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if "?" in t:
+        return True
+    return any(t.startswith(q) for q in QUESTION_MARKERS)
+
+
+def _is_table_edit_intent(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return any(k in t for k in TABLE_EDIT_MARKERS)
+
+
+def _history_to_text(history: Optional[list[dict]], max_items: int = 12) -> str:
+    if not history:
+        return ""
+    lines = []
+    for item in history[-max_items:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).strip().lower()
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        if role not in ("user", "ai", "assistant"):
+            role = "user"
+        role_lbl = "Пользователь" if role == "user" else "AI"
+        lines.append(f"{role_lbl}: {text}")
+    return "\n".join(lines)
+
+
+def _resolve_followup_message(message: str, history: Optional[list[dict]]) -> str:
+    """Раскрывает короткие фоллоуапы вроде 'да посчитай все' по истории чата."""
+    msg = (message or "").strip()
+    msg_l = msg.lower()
+    if not history:
+        return msg
+    if msg_l not in ("да", "да.", "ок", "ок.", "да посчитай все", "посчитай все", "считай все", "да считай все"):
+        return msg
+    prev_user = None
+    for item in reversed(history):
+        if isinstance(item, dict) and str(item.get("role", "")).lower() == "user":
+            text = str(item.get("text", "")).strip()
+            if text and text.lower() != msg_l:
+                prev_user = text
+                break
+    if not prev_user:
+        return msg
+    if "сумм" in prev_user.lower() and ("лимит" in prev_user.lower() or "колонк" in prev_user.lower()):
+        return prev_user + " по всем доступным данным"
+    return prev_user + ". Подтверждение пользователя: " + msg
+
+
+def _plain_chat_answer(message: str, current_table: dict, schema: str, history: Optional[list[dict]] = None) -> str:
+    """Обычный текстовый ответ без JSON, для вопросов/уточнений."""
+    cur = {
+        "headers": current_table.get("headers", []),
+        "rows_count": len(current_table.get("rows", [])),
+        "rows_preview": current_table.get("rows", [])[:20],
+    }
+    user_payload = (
+        "Вопрос пользователя:\n"
+        f"{message}\n\n"
+        "История диалога:\n"
+        f"{_history_to_text(history)}\n\n"
+        "Текущая таблица (контекст):\n"
+        f"{json.dumps(cur, ensure_ascii=False)}\n\n"
+        "Схема БД:\n"
+        f"{schema}"
+    )
+    system_prompt = (
+        "Ты AI-помощник по бюджетным таблицам.\n"
+        "Отвечай ТОЛЬКО обычным текстом на русском, без JSON и без markdown.\n"
+        "Если пользователь спрашивает 'это все данные?' или про полноту данных, "
+        "объясни, что на экране текущая выборка, укажи число строк из контекста и "
+        "предложи переформулировать запрос для более широкой выборки.\n"
+        "Если вопрос не про изменение таблицы — просто дай информативный ответ.\n"
+        "Не пиши технические ошибки и не проси формат JSON."
+    )
+    return gc.chat([
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_payload},
+    ])
 
 
 def _local_transform(current_table, message):
@@ -710,13 +805,80 @@ def api_chat(req: ChatRequest):
     if _is_greeting(req.message):
         return {"action": "message", "table": req.current_table, "ai_message": "Привет! Готов помочь с таблицей."}
 
-    local_result = _local_transform(req.current_table, req.message)
+    effective_message = _resolve_followup_message(req.message, req.history)
+    local_result = _local_transform(req.current_table, effective_message)
     if local_result is not None:
         return local_result
 
+    # Спец-кейс: "посчитай сумму лимитов по всем данным" — считаем напрямую из БД.
+    eff_l = (effective_message or "").lower()
+    if ("сумм" in eff_l and "лимит" in eff_l and ("всем доступным данным" in eff_l or "по всем данным" in eff_l or "считай все" in eff_l)):
+        try:
+            h, r = database.execute_plan({
+                "sources": ["mart_rchb"],
+                "columns": ["limit_amount"],
+                "limit": 5000,
+            })
+            ci = 0 if h else None
+            total = 0.0
+            cnt = 0
+            if ci is not None:
+                for row in r:
+                    v = _to_num(row[ci] if ci < len(row) else "")
+                    if v is not None:
+                        total += v
+                        cnt += 1
+            pretty = f"{total:,.2f}".replace(",", " ").replace(".00", "")
+            return {
+                "action": "message",
+                "table": req.current_table,
+                "ai_message": f"Сумма по колонке лимитов по всем доступным данным: {pretty} руб. (учтено строк: {cnt})."
+            }
+        except Exception:
+            pass
+
+    # Если это вопрос (а не команда редактирования) — отвечаем обычным текстом.
+    if _is_question_text(effective_message) and not _is_table_edit_intent(effective_message):
+        rows_n = len(req.current_table.get("rows", []))
+        msg_l = (effective_message or "").strip().lower()
+        if "это все" in msg_l or "все данные" in msg_l:
+            return {
+                "action": "message",
+                "table": req.current_table,
+                "ai_message": (
+                    f"Сейчас в таблице {rows_n} строк(и): это текущая выборка по вашему запросу. "
+                    "Если нужно шире, уточните период/территорию или напишите: "
+                    "«покажи максимально полную выборку без дополнительных ограничений»."
+                ),
+            }
+        schema = get_schema_context()
+        try:
+            txt = _plain_chat_answer(effective_message, req.current_table, schema, req.history)
+            return {"action": "message", "table": req.current_table, "ai_message": txt}
+        except Exception as e:
+            msg = str(e)
+            if "429" in msg:
+                return {
+                    "action": "message",
+                    "table": req.current_table,
+                    "ai_message": "Сервис AI временно перегружен (лимит запросов). Повторите через 10-20 секунд."
+                }
+            if "Illegal header value" in msg or "Basic " in msg:
+                return {
+                    "action": "message",
+                    "table": req.current_table,
+                    "ai_message": "AI-сервис не настроен: проверьте ключ GigaChat в .env."
+                }
+            return {
+                "action": "message",
+                "table": req.current_table,
+                "ai_message": "Не удалось получить ответ на вопрос. Попробуйте переформулировать."
+            }
+
     schema=get_schema_context()
     cur_json=json.dumps({"headers":req.current_table.get("headers",[]),"rows":req.current_table.get("rows",[])[:20]},ensure_ascii=False)
-    user_msg="Текущая таблица:\n"+cur_json+"\n\nЗапрос пользователя: "+req.message
+    hist_txt = _history_to_text(req.history)
+    user_msg="История диалога:\n"+hist_txt+"\n\nТекущая таблица:\n"+cur_json+"\n\nЗапрос пользователя: "+effective_message
     try:
         raw=gc.chat([{"role":"system","content":build_chat_prompt(schema)},{"role":"user","content":user_msg}])
     except Exception as e:
@@ -736,15 +898,17 @@ def api_chat(req: ChatRequest):
         raise HTTPException(502, "GigaChat: " + msg)
     try: result=_extract_json(raw)
     except Exception:
-        # GigaChat мог вернуть поломанный JSON. Не показываем сырой blob пользователю.
-        raw_s = (raw or "").strip()
-        if raw_s.startswith("{") and ("\"action\"" in raw_s or "\"new_table\"" in raw_s):
+        # Если JSON сломан — делаем второй проход в текстовом режиме, чтобы не возвращать ошибку формата.
+        try:
+            txt = _plain_chat_answer(effective_message, req.current_table, schema, req.history)
+            return {"action":"message","table":req.current_table,"ai_message":txt}
+        except Exception:
+            raw_s = (raw or "").strip()
             return {
-                "action": "message",
-                "table": req.current_table,
-                "ai_message": "Ответ AI получен в некорректном формате. Повторите команду короче или разбейте на шаги."
+                "action":"message",
+                "table":req.current_table,
+                "ai_message": raw_s[:500] if raw_s else "Не удалось обработать ответ AI. Попробуйте уточнить запрос."
             }
-        return {"action":"message","table":req.current_table,"ai_message":raw_s[:500]}
     action=result.get("action","transform"); ai_msg=result.get("ai_message","Готово")
     if action=="query":
         plan=result.get("plan",{}); merge_on=result.get("merge_on")
