@@ -54,7 +54,7 @@ def execute_plan(plan: dict) -> tuple[list[str], list[list[Any]]]:
     filters = plan.get("filters", {})
     columns = plan.get("columns", [])
     joins = plan.get("joins", [])
-    limit = min(int(plan.get("limit", 500)), 2000)
+    limit = min(int(plan.get("limit", 2000)), 5000)
 
     # Валидация таблиц
     for t in sources:

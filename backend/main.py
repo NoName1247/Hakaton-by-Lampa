@@ -95,6 +95,16 @@ def _normalize_query_plan(plan):
             filters["source_file_contains_any"] = found
             filters.pop("source_file_contains", None)
 
+    # Если пользователь просит "все данные", поднимаем лимит выборки.
+    # LLM иногда не задает limit, тогда дефолт может вернуть только часть строк.
+    q = str(plan.get("_user_query", "")).lower()
+    if any(k in q for k in ("все данные", "дай все", "полностью", "целиком", "всю таблицу", "все по")):
+        try:
+            current_limit = int(plan.get("limit", 0) or 0)
+        except (TypeError, ValueError):
+            current_limit = 0
+        plan["limit"] = max(current_limit, 2000)
+
     return plan
 
 # ── UTILS ────────────────────────────────────────────────────────────────────
@@ -198,6 +208,34 @@ def _local_transform(current_table, message):
         return {"action": "message", "table": current_table, "ai_message": "Привет! Готов помочь с таблицей."}
     if simple_msg in ("спасибо", "спс", "благодарю"):
         return {"action": "message", "table": current_table, "ai_message": "Пожалуйста."}
+
+    # ── Создать пустую таблицу заданного размера: "10 на 10 пустых клеточек" ──
+    m_size = re.search(
+        r"(?:сделай|создай|сформируй|построй|сделать)\s*(\d{1,3})\s*(?:на|x|х)\s*(\d{1,3}).*(?:пуст|клет|яче)",
+        msg_l
+    )
+    if m_size:
+        rows_n = max(1, min(int(m_size.group(1)), 200))
+        cols_n = max(1, min(int(m_size.group(2)), 200))
+        new_headers = [f"Столбец {i+1}" for i in range(cols_n)]
+        new_rows = [[""] * cols_n for _ in range(rows_n)]
+        return {
+            "action": "transform",
+            "table": {"headers": new_headers, "rows": new_rows},
+            "ai_message": f"Создал пустую таблицу {rows_n}×{cols_n}."
+        }
+
+    # ── Очистить все ячейки, сохранив структуру ───────────────────────────────
+    if re.search(r"(?:удали|очисти|убери)\s+все\s+(?:ячейки|данные\s+в\s+таблице|содержимое\s+таблицы)", msg_l):
+        if ncols <= 0:
+            return {"action": "message", "table": current_table, "ai_message": "Таблица уже пуста."}
+        keep_rows = max(nrows, 1)
+        new_rows = [[""] * ncols for _ in range(keep_rows)]
+        return {
+            "action": "transform",
+            "table": {"headers": headers, "rows": new_rows},
+            "ai_message": "Таблица очищена: все ячейки пустые."
+        }
 
     # ── Обновить конкретную строку: "добавь в 6 строке полный текст ..." ──
     m_set_row = re.search(r"(?:добавь|вставь|запиши|поставь)\s+в\s+(\d+)\s*строк[еуы]\s+(?:полный\s+текст\s+)?(.+)$", msg_l)
@@ -646,12 +684,16 @@ def api_query(req: QueryRequest):
         raw=gc.chat([{"role":"system","content":build_query_prompt(schema)},{"role":"user","content":req.query}])
     except Exception as e:
         msg = str(e)
+        if "Illegal header value" in msg or "Basic " in msg:
+            raise HTTPException(502, "AI-сервис не настроен: проверьте ключ GigaChat в .env")
         if "429" in msg:
             raise HTTPException(429, "Сервис AI временно перегружен. Попробуйте повторить запрос через 10-20 секунд.")
         raise HTTPException(502, "GigaChat: " + msg)
     try: plan=_extract_json(raw)
     except Exception as e: raise HTTPException(422,"Bad JSON: "+str(e))
+    plan["_user_query"] = req.query
     plan = _normalize_query_plan(plan)
+    plan.pop("_user_query", None)
     ai_comment=plan.pop("ai_comment","Данные получены")
     try: headers,rows=database.execute_plan(plan)
     except ValueError as e: raise HTTPException(400,str(e))
@@ -679,6 +721,12 @@ def api_chat(req: ChatRequest):
         raw=gc.chat([{"role":"system","content":build_chat_prompt(schema)},{"role":"user","content":user_msg}])
     except Exception as e:
         msg = str(e)
+        if "Illegal header value" in msg or "Basic " in msg:
+            return {
+                "action": "message",
+                "table": req.current_table,
+                "ai_message": "AI-сервис не настроен: проверьте ключ GigaChat в .env."
+            }
         if "429" in msg:
             return {
                 "action": "message",

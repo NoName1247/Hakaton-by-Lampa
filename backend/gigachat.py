@@ -45,21 +45,38 @@ def _get_token() -> str:
 def chat(messages: list[dict], model: str = "GigaChat", temperature: float = 0.2) -> str:
     """Отправить список сообщений, вернуть текст ответа ассистента."""
     token = _get_token()
-    resp = httpx.post(
-        GIGACHAT_API_URL,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": f"Bearer {token}",
-        },
-        json={
-            "model": model,
-            "messages": messages,
-            "temperature": temperature,
-            "stream": False,
-        },
-        verify=False,
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.json()["choices"][0]["message"]["content"]
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": False,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+
+    # Ретраи на временные ограничения/перегрузку API.
+    retries = [0, 2, 4]  # мгновенно, затем +2с, затем +4с
+    last_resp = None
+    for wait_s in retries:
+        if wait_s:
+            time.sleep(wait_s)
+        resp = httpx.post(
+            GIGACHAT_API_URL,
+            headers=headers,
+            json=payload,
+            verify=False,
+            timeout=60,
+        )
+        last_resp = resp
+        if resp.status_code in (429, 502, 503, 504):
+            continue
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    # Если все попытки исчерпаны — поднимаем исходную ошибку.
+    assert last_resp is not None
+    last_resp.raise_for_status()
+    return last_resp.json()["choices"][0]["message"]["content"]

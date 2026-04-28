@@ -59,10 +59,86 @@ body{min-height:100dvh;overflow:hidden;}
 .tb-sep{width:1px;height:22px;background:var(--border);}
 
 /* AUTH */
-#auth .view-body{flex:1;display:grid;place-items:center;padding:24px;}
-.card{width:min(100%,400px);background:var(--surface);border:1px solid var(--border);
-  border-radius:14px;padding:36px;box-shadow:0 12px 40px rgba(0,0,0,.1);}
-.card h1{font-size:22px;margin-bottom:6px;}
+#auth .view-body{
+  flex:1;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(180deg, #cee8e2 0%, #c3e1dc 55%, #b9dad4 100%);
+}
+#auth .card{
+  position:relative;
+  z-index:2;
+  width:min(100%, 306px);
+  background:#f8f9f8;
+  border:none;
+  border-radius:34px;
+  padding:42px 34px 32px;
+  box-shadow:0 18px 50px rgba(40,65,70,.12);
+}
+#auth .card h1{
+  font-size:38px;
+  line-height:1.07;
+  text-align:center;
+  margin-bottom:32px;
+  color:#18233a;
+}
+#auth .field{display:grid;gap:6px;margin-bottom:12px;}
+#auth .field label{display:none;}
+#auth .inp{
+  border-radius:999px;
+  border:1px solid #d2d8d7;
+  background:#f3f5f4;
+  height:48px;
+  padding:0 16px;
+}
+#auth .btn.primary{
+  border-radius:999px;
+  min-height:46px;
+  font-size:18px;
+  font-weight:600;
+  background:#068e7c;
+  border-color:#068e7c;
+}
+#auth .btn.primary:hover{background:#067768;}
+#auth .auth-waves{
+  position:absolute;
+  inset:auto -22% -15px -22%;
+  height:370px;
+  pointer-events:none;
+}
+#auth .auth-waves .wave{
+  position:absolute;
+  left:-10%;
+  width:120%;
+  border-radius:42% 58% 40% 60% / 60% 40% 60% 40%;
+  transform-origin:center;
+}
+#auth .auth-waves .wave.w1{
+  bottom:118px;
+  height:200px;
+  background:rgba(170, 211, 206, .62);
+  animation:authWave 19s ease-in-out infinite;
+}
+#auth .auth-waves .wave.w2{
+  bottom:142px;
+  height:170px;
+  background:rgba(152, 199, 192, .42);
+  animation:authWave 25s ease-in-out infinite reverse;
+}
+#auth .auth-waves .wave.w3{
+  bottom:170px;
+  height:145px;
+  background:rgba(140, 188, 182, .34);
+  animation:authWave 31s ease-in-out infinite;
+}
+@keyframes authWave{
+  0%{transform:translateX(-2%) rotate(0deg);}
+  50%{transform:translateX(2%) rotate(1deg);}
+  100%{transform:translateX(-2%) rotate(0deg);}
+}
 .sub{color:var(--muted);margin-bottom:20px;font-size:13px;}
 .field{display:grid;gap:6px;margin-bottom:14px;}
 .field label{font-size:13px;font-weight:600;}
@@ -73,14 +149,62 @@ body{min-height:100dvh;overflow:hidden;}
 .err{color:#c0392b;font-size:12px;margin-top:4px;display:none;}
 
 /* PROMPT */
-#prompt .view-body{flex:1;display:grid;place-items:center;padding:24px;}
-.prompt-search{width:min(100%,760px);display:grid;justify-items:center;gap:26px;}
+#prompt .view-body{
+  flex:1;
+  display:grid;
+  place-items:center;
+  padding:24px;
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(180deg, #f4f8f7 0%, #edf4f3 55%, #e7f0ee 100%);
+}
+.prompt-search{width:min(100%,760px);display:grid;justify-items:center;gap:26px;position:relative;z-index:2;}
 .lampa-logo{font-size:72px;font-weight:700;letter-spacing:.2px;color:var(--lampa);line-height:1;}
 .search-shell{width:100%;display:flex;align-items:flex-end;gap:8px;background:var(--surface);border:1px solid #d9d9d9;border-radius:28px;padding:12px 14px 12px 16px;box-shadow:0 1px 6px rgba(32,33,36,.2);}
 .search-shell:focus-within{border-color:#8ab4ff;box-shadow:0 2px 10px rgba(56,119,241,.25);}
 .search-ta{flex:1;border:none;outline:none;background:transparent;font:inherit;font-size:17px;line-height:1.4;resize:none;min-height:28px;max-height:220px;overflow:auto;}
 .icon-btn{width:38px;height:38px;border:none;border-radius:999px;background:transparent;display:grid;place-items:center;cursor:pointer;}
 .icon-btn:hover{background:#f0f3f8;}
+.icon-btn.listening{
+  background:rgba(211, 47, 47, 0.14);
+  color:#b00020;
+  animation:micPulse 1.4s ease-in-out infinite;
+}
+@keyframes micPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(176, 0, 32, 0.25);}
+  50%{box-shadow:0 0 0 8px rgba(176, 0, 32, 0);}
+}
+.prompt-waves{
+  position:absolute;
+  inset:auto -22% -15px -22%;
+  height:370px;
+  pointer-events:none;
+}
+.prompt-waves .wave{
+  position:absolute;
+  left:-10%;
+  width:120%;
+  border-radius:42% 58% 40% 60% / 60% 40% 60% 40%;
+  transform-origin:center;
+}
+.prompt-waves .wave.w1{
+  bottom:118px;
+  height:200px;
+  background:rgba(170, 211, 206, .155);
+  animation:authWave 19s ease-in-out infinite;
+}
+.prompt-waves .wave.w2{
+  bottom:142px;
+  height:170px;
+  background:rgba(152, 199, 192, .105);
+  animation:authWave 25s ease-in-out infinite reverse;
+}
+.prompt-waves .wave.w3{
+  bottom:170px;
+  height:145px;
+  background:rgba(140, 188, 182, .085);
+  animation:authWave 31s ease-in-out infinite;
+}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;}
 .hint-box{background:#eef6f6;border:1px solid #c9e2e2;border-radius:10px;padding:12px;margin-bottom:16px;
   color:#315b5e;font-size:13px;line-height:1.45;}
@@ -155,7 +279,47 @@ body{min-height:100dvh;overflow:hidden;}
 .dot:nth-child(3){animation-delay:.4s;}
 @keyframes blink{0%,80%,100%{opacity:.25;transform:translateY(0);}40%{opacity:1;transform:translateY(-1px);}}
 .chat-foot{display:flex;gap:6px;padding:9px 11px;border-top:1px solid var(--border);}
+
+/* Analytics tab */
+.analytics-panel{
+  display:none;
+  flex-direction:column;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--surface);
+  overflow:hidden;
+  min-height:0;
+  flex:1;
+}
+.analytics-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);}
+.analytics-controls{padding:10px 12px;display:grid;gap:10px;border-bottom:1px solid var(--border);}
+.chart-wrap{position:relative;flex:1;min-height:260px;padding:10px;}
+.chart-type-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+.chart-card{border:1px solid var(--border);border-radius:8px;padding:6px;background:#fafaf8;cursor:pointer;display:grid;place-items:center;min-height:52px;}
+.chart-card.active{border-color:var(--primary);background:var(--psoft);}
+.editor-wrap.tab-analytics .sheet-wrap{display:none;}
+.editor-wrap.tab-analytics .right-panel{display:none;}
+.editor-wrap.tab-analytics .analytics-panel{display:flex;}
 .chat-foot .inp{flex:1;padding:6px 10px;font-size:13px;}
+
+.sheet-bottom-tabs{
+  height:38px;
+  border-top:1px solid var(--border);
+  background:#f1f3f4;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:0 10px;
+}
+.sheet-tab-icon{
+  width:22px;height:22px;border:none;background:transparent;border-radius:6px;cursor:pointer;
+  color:#5f6368;font-size:16px;display:grid;place-items:center;
+}
+.sheet-tab-icon:hover{background:#e4e8ea;}
+.sheet-tab{
+  border:none;background:transparent;color:#444;font-size:14px;padding:6px 12px;border-radius:8px;cursor:pointer;
+}
+.sheet-tab.active{background:#dfe8ff;color:#1a56b8;font-weight:600;}
 
 /* MODAL */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;place-items:center;}
@@ -201,6 +365,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     border-top:1px solid var(--border);
     border-radius:10px;
   }
+  .chart-type-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 
 @media (max-width: 640px){
@@ -210,7 +375,8 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
   .logo{width:28px;height:28px;border-radius:8px;}
   .lampa-logo{font-size:52px;}
   #auth .view-body,#prompt .view-body{padding:12px;}
-  .card{padding:20px;}
+  #auth .card{padding:30px 22px 26px;}
+  #auth .card h1{font-size:32px;margin-bottom:20px;}
   .sheet-table th{min-width:110px;}
   #ce{min-width:110px;}
   .sheet-wrap{height:54%;}
@@ -221,7 +387,8 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
 @media (max-height: 740px){
   .lampa-logo{font-size:48px;}
   .prompt-search{gap:14px;}
-  .card{padding:20px;}
+  #auth .card{padding:28px 22px 24px;}
+  #auth .card h1{font-size:30px;}
 }
 </style>
 </head>
@@ -239,35 +406,41 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
   </div>
   <div id="editorTools" style="display:none;display:contents;">
     <button class="btn" id="btnBackPrompt" type="button">&#8592; Новый запрос</button>
-    <button class="btn" id="btnApplyFilters" type="button">Обновить таблицу</button>
-    <button class="btn" id="btnSavePreset" type="button">Сохранить сценарий</button>
+    <button class="btn" id="btnUndoTop" type="button">&#8630; Назад</button>
+    <button class="btn" id="btnRedoTop" type="button">&#8631; Вперед</button>
+    <button class="btn" id="btnAnalytics" type="button">Аналитика</button>
     <button class="btn" id="btnExport" type="button">Экспорт</button>
     <div class="spacer"></div>
     <button class="btn" id="btnKeys" type="button">Справка</button>
     <button class="btn" id="btnChat" type="button">AI</button>
   </div>
 </header>
-<div class="sheet-menubar" id="sheetMenubar">
+<div class="sheet-menubar" id="sheetMenubar" style="display:none!important;">
   <!-- Dynamic menu -->
 </div>
-<div class="sheet-toolbar" id="sheetToolbar"></div>
+<div class="sheet-toolbar" id="sheetToolbar" style="display:none!important;"></div>
 
 <!-- AUTH -->
 <section id="auth" class="view active">
   <div class="view-body">
     <div class="card">
-      <h1>Вход в систему</h1>
+      <h1>Добро<br>пожаловать!</h1>
       <div class="field">
         <label for="fEmail">Логин</label>
-        <input class="inp" id="fEmail" type="text" placeholder="Введите логин">
+        <input class="inp" id="fEmail" type="text" placeholder="Имя пользователя">
         <span class="err" id="errEmail">Введите логин</span>
       </div>
       <div class="field">
         <label for="fPass">Пароль</label>
-        <input class="inp" id="fPass" type="password" placeholder="Введите пароль">
+        <input class="inp" id="fPass" type="password" placeholder="Пароль">
         <span class="err" id="errPass">Введите пароль</span>
       </div>
       <button class="btn primary" id="btnLogin" type="button" style="width:100%;justify-content:center;margin-top:4px;">Войти</button>
+    </div>
+    <div class="auth-waves" aria-hidden="true">
+      <div class="wave w1"></div>
+      <div class="wave w2"></div>
+      <div class="wave w3"></div>
     </div>
   </div>
 </section>
@@ -289,6 +462,11 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
         <button class="btn primary" id="btnToEditor" type="button">Найти</button>
       </div>
     </div>
+    <div class="prompt-waves" aria-hidden="true">
+      <div class="wave w1"></div>
+      <div class="wave w2"></div>
+      <div class="wave w3"></div>
+    </div>
   </div>
 </section>
 
@@ -300,7 +478,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
     <span class="cell-val" id="cVal">&#8212;</span>
     <span class="undo-hint" id="uHint"></span>
   </div>
-  <div class="editor-wrap">
+  <div class="editor-wrap" id="editorWrap">
     <div class="sheet-wrap" id="sw" tabindex="0">
       <table class="sheet-table" id="st"></table>
       <textarea id="ce" rows="1"></textarea>
@@ -311,7 +489,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
       </div>
       <div class="panel-section active" id="aiSection">
         <div class="chat-msgs" id="chatMsgs">
-          <div class="msg ai">Опишите изменение таблицы. Например: "отсортируй по % освоения" или "оставь IT-Куб". Я превращу команду в безопасное действие.</div>
+          <div class="msg ai">Привет! Я твой AI-ассистент для редактирования таблицы. Напиши, что изменить.</div>
         </div>
         <div class="chat-foot">
           <input class="inp" id="chatInp" placeholder="Команда для таблицы" autocomplete="off">
@@ -319,6 +497,28 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
         </div>
       </div>
     </div>
+    <div class="analytics-panel" id="analyticsPanel">
+      <div class="analytics-head">
+        <strong>Визуализация</strong>
+        <button class="btn" id="btnAnalyticsClose" type="button">К таблице</button>
+      </div>
+      <div class="analytics-controls">
+        <div class="chart-type-grid" id="chartTypeGrid"></div>
+        <div class="field">
+          <label for="chartMetric">Показатель</label>
+          <select class="sel" id="chartMetric"></select>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chartCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+  <div class="sheet-bottom-tabs">
+    <button class="sheet-tab-icon" type="button" title="Новая вкладка">+</button>
+    <button class="sheet-tab-icon" type="button" title="Меню вкладок">&#9776;</button>
+    <button class="sheet-tab active" id="tabTable" type="button">Таблица</button>
+    <button class="sheet-tab" id="tabAnalytics" type="button">Аналитика</button>
   </div>
 </section>
 
@@ -388,6 +588,7 @@ kbd{background:#e8e8e4;border:1px solid #ccc;border-radius:4px;padding:2px 6px;f
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 function toast(msg, ms) {
@@ -441,8 +642,8 @@ function showView(id) {
     v.classList.toggle('active', v.id === id);
   });
   document.getElementById('editorTools').style.display = id === 'editor' ? 'contents' : 'none';
-  document.getElementById('sheetMenubar').classList.toggle('active', id === 'editor');
-  document.getElementById('sheetToolbar').classList.toggle('active', id === 'editor');
+  document.getElementById('sheetMenubar').classList.remove('active');
+  document.getElementById('sheetToolbar').classList.remove('active');
   if (id === 'editor') { S.render(); document.getElementById('sw').focus(); }
 }
 
@@ -460,9 +661,12 @@ function doLogin() {
 document.getElementById('btnLogin').addEventListener('click', doLogin);
 document.getElementById('fPass').addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
 document.getElementById('fEmail').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('fPass').focus(); });
-document.getElementById('btnBackPrompt').addEventListener('click', function(){ showView('prompt'); });
-document.getElementById('btnApplyFilters').addEventListener('click', function(){ toast('Таблица обновлена'); });
-document.getElementById('btnSavePreset').addEventListener('click', function(){ toast('Сценарий сохранён'); });
+document.getElementById('btnBackPrompt').addEventListener('click', function(){
+  if (window.Analytics) Analytics.close();
+  showView('prompt');
+});
+document.getElementById('btnUndoTop').addEventListener('click', function(){ S.undo(); });
+document.getElementById('btnRedoTop').addEventListener('click', function(){ S.redo(); });
 
 // ── PROMPT ───────────────────────────────────────────────────────────────────
 var API_BASE = 'http://139.60.162.135:8000';
@@ -514,32 +718,80 @@ promptTa.addEventListener('input', function(){
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 220) + 'px';
 });
-document.getElementById('btnVoice').addEventListener('click', function(){
+var voiceBtn = document.getElementById('btnVoice');
+var voiceRec = null;
+var voiceListening = false;
+function initVoiceRec() {
+  if (voiceRec) return voiceRec;
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { toast('Голосовой ввод не поддерживается в этом браузере'); return; }
-  var rec = new SR();
-  rec.lang = 'ru-RU'; rec.interimResults = false; rec.maxAlternatives = 1;
-  rec.onresult = function(ev){
-    var txt = (ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || '';
-    promptTa.value = txt.trim();
-    promptTa.dispatchEvent(new Event('input'));
+  if (!SR) return null;
+  voiceRec = new SR();
+  voiceRec.lang = 'ru-RU';
+  voiceRec.interimResults = false;
+  voiceRec.maxAlternatives = 1;
+  voiceRec.onstart = function() {
+    voiceListening = true;
+    voiceBtn.classList.add('listening');
+    toast('Слушаю...');
   };
-  rec.onerror = function(){ toast('Не удалось распознать голос'); };
-  rec.start();
+  voiceRec.onend = function() {
+    voiceListening = false;
+    voiceBtn.classList.remove('listening');
+  };
+  voiceRec.onresult = function(ev) {
+    var txt = (ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || '';
+    if (txt.trim()) {
+      promptTa.value = txt.trim();
+      promptTa.dispatchEvent(new Event('input'));
+      toast('Голос распознан');
+    }
+  };
+  voiceRec.onerror = function(ev) {
+    var code = (ev && ev.error) ? String(ev.error) : '';
+    if (code === 'not-allowed' || code === 'service-not-allowed') {
+      toast('Дайте доступ к микрофону в браузере');
+    } else if (code === 'no-speech') {
+      toast('Речь не распознана, повторите');
+    } else if (code === 'network') {
+      toast('Ошибка сети при распознавании речи');
+    } else {
+      toast('Не удалось распознать голос');
+    }
+  };
+  return voiceRec;
+}
+voiceBtn.addEventListener('click', function(){
+  var rec = initVoiceRec();
+  if (!rec) { toast('Голосовой ввод не поддерживается в этом браузере'); return; }
+  try {
+    if (voiceListening) {
+      rec.stop();
+      return;
+    }
+    rec.start();
+  } catch (_) {
+    toast('Микрофон уже запущен');
+  }
 });
 
 // ── SPREADSHEET ──────────────────────────────────────────────────────────────
 var S = {
-  headers: ['Период','Организация','КЦСР','Лимит','Расходы','Контракты','Платежи','% освоения','Остаток'],
+  headers: ['Столбец 1','Столбец 2','Столбец 3','Столбец 4','Столбец 5','Столбец 6','Столбец 7','Столбец 8','Столбец 9','Столбец 10'],
   data: [
-    ['2025-01','IT-Куб','08.3.02.97070','1200000','680000','450000','390000','56.7','520000'],
-    ['2025-02','IT-Куб','08.3.02.97070','1200000','740000','450000','420000','61.7','460000'],
-    ['2025-03','IT-Куб','08.3.02.97070','1200000','810000','450000','440000','67.5','390000'],
-    ['2025-04','IT-Куб','08.3.02.97070','1200000','920000','450000','470000','76.7','280000'],
-    ['2025-05','IT-Куб','08.3.02.97070','1200000','990000','450000','510000','82.5','210000']
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','',''],
+    ['','','','','','','','','','']
   ],
   sel: {r:0,c:0}, selEnd: null,
   editing: false, editR: 0, editC: 0, editOrig: '',
+  mouseSelecting: false,
   undoStack: [], redoStack: [], clipboard: null,
   sortCol: -1, sortDir: 1,
 
@@ -631,7 +883,7 @@ var S = {
     var ed = document.getElementById('ce');
     ed.style.top    = rect.top + 'px';
     ed.style.left   = rect.left + 'px';
-    ed.style.width  = Math.max(rect.width, 160) + 'px';
+    ed.style.width  = rect.width + 'px';
     ed.style.minHeight = rect.height + 'px';
     ed.style.display = 'block';
     ed.value = (init !== undefined && init !== null) ? init : this.data[r][c];
@@ -672,8 +924,13 @@ var S = {
     document.querySelectorAll('#st td[data-r]').forEach(function(td) {
       td.onmousedown = function(e) {
         if (e.button === 2) return;
+        self.mouseSelecting = true;
         if (e.shiftKey) self.select(+td.dataset.r, +td.dataset.c, true);
         else self.select(+td.dataset.r, +td.dataset.c);
+      };
+      td.onmouseover = function() {
+        if (!self.mouseSelecting || self.editing) return;
+        self.select(+td.dataset.r, +td.dataset.c, true);
       };
       td.ondblclick = function() { self.startEdit(+td.dataset.r, +td.dataset.c); };
       td.oncontextmenu = function(e) {
@@ -955,11 +1212,7 @@ function runCommand(cmd) {
   if (cmd === 'freezeRow') return toast('Закрепление первой строки включено');
   if (cmd === 'freezeCol') return toast('Закрепление первого столбца включено');
   if (cmd === 'fullscreen') return document.documentElement.requestFullscreen ? document.documentElement.requestFullscreen() : toast('Полный экран не поддерживается');
-  if (cmd === 'toggleFormula') {
-    var fb = document.querySelector('.formula-bar');
-    fb.style.display = fb.style.display === 'none' ? 'flex' : 'none';
-    return toast('Строка формул: ' + (fb.style.display === 'none' ? 'скрыта' : 'показана'));
-  }
+  if (cmd === 'toggleFormula') { return toast('Строка формул отключена в этом режиме'); }
   if (cmd === 'toggleGrid') {
     document.getElementById('st').classList.toggle('no-grid');
     return toast('Линии сетки переключены');
@@ -1156,6 +1409,9 @@ function hideCtx() { ctxMenu.classList.remove('on'); }
 document.addEventListener('mousedown', function(e){
   if (!ctxMenu.contains(e.target)) hideCtx();
 });
+document.addEventListener('mouseup', function(){
+  S.mouseSelecting = false;
+});
 document.getElementById('ctxCopy').onclick   = function(){ S.copy();          hideCtx(); };
 document.getElementById('ctxPaste').onclick  = function(){ S.paste();         hideCtx(); };
 document.getElementById('ctxClear').onclick  = function(){ S.clearSel();      hideCtx(); };
@@ -1209,6 +1465,166 @@ function addMsg(text, role) {
   d.className = 'msg ' + role; d.textContent = text;
   var msgs = document.getElementById('chatMsgs');
   msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+
+function addThinking() {
+  var d = document.createElement('div');
+  d.className = 'msg ai thinking';
+  d.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+  var msgs = document.getElementById('chatMsgs');
+  msgs.appendChild(d); msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+
+function typeAiMessage(text) {
+  text = String(text || '');
+  var node = addMsg('', 'ai');
+  var i = 0;
+  var speed = 12;
+  (function tick(){
+    if (i >= text.length) return;
+    node.textContent += text.charAt(i++);
+    var msgs = document.getElementById('chatMsgs');
+    msgs.scrollTop = msgs.scrollHeight;
+    setTimeout(tick, speed);
+  })();
+}
+
+function extractNumericColumns() {
+  var cols = [];
+  for (var c = 0; c < S.headers.length; c++) {
+    var numeric = false;
+    for (var r = 0; r < Math.min(S.data.length, 80); r++) {
+      var raw = S.data[r][c];
+      if (raw === '' || raw === null || raw === undefined) continue;
+      var num = parseFloat(String(raw).replace(/\s+/g, '').replace('%', '').replace(',', '.'));
+      if (!isNaN(num)) { numeric = true; break; }
+    }
+    if (numeric) cols.push({ index: c, name: S.headers[c] || ('Колонка ' + (c + 1)) });
+  }
+  return cols;
+}
+
+var Analytics = {
+  enabled: false,
+  chartType: 'bar',
+  chart: null,
+  types: [
+    { id:'bar', icon:'▇▅▃' },
+    { id:'horizontalBar', icon:'▉\n▆\n▃' },
+    { id:'line', icon:'╱╲╱' },
+    { id:'pie', icon:'◔' },
+    { id:'doughnut', icon:'◍' },
+    { id:'area', icon:'▁▃▆█' },
+    { id:'scatter', icon:'∙·•' },
+    { id:'radar', icon:'✶' }
+  ],
+  open: function() {
+    if (typeof Chart === 'undefined') { toast('Графики еще загружаются'); return; }
+    this.enabled = true;
+    document.getElementById('editorWrap').classList.add('tab-analytics');
+    document.getElementById('tabAnalytics').classList.add('active');
+    document.getElementById('tabTable').classList.remove('active');
+    this.renderTypeCards();
+    this.fillMetricSelect();
+    this.renderChart();
+  },
+  close: function() {
+    this.enabled = false;
+    document.getElementById('editorWrap').classList.remove('tab-analytics');
+    document.getElementById('tabTable').classList.add('active');
+    document.getElementById('tabAnalytics').classList.remove('active');
+    if (this.chart) { this.chart.destroy(); this.chart = null; }
+  },
+  toggle: function() {
+    if (this.enabled) this.close(); else this.open();
+  },
+  renderTypeCards: function() {
+    var root = document.getElementById('chartTypeGrid');
+    var self = this;
+    root.innerHTML = '';
+    this.types.forEach(function(t){
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'chart-card' + (self.chartType === t.id ? ' active' : '');
+      card.title = t.id;
+      card.textContent = t.icon;
+      card.addEventListener('click', function(){
+        self.chartType = t.id;
+        self.renderTypeCards();
+        self.renderChart();
+      });
+      root.appendChild(card);
+    });
+  },
+  fillMetricSelect: function() {
+    var sel = document.getElementById('chartMetric');
+    var cols = extractNumericColumns();
+    sel.innerHTML = '';
+    cols.forEach(function(col){
+      var opt = document.createElement('option');
+      opt.value = String(col.index);
+      opt.textContent = col.name;
+      sel.appendChild(opt);
+    });
+    if (!cols.length) {
+      var opt = document.createElement('option');
+      opt.value = '-1';
+      opt.textContent = 'Нет числовых столбцов';
+      sel.appendChild(opt);
+    }
+  },
+  renderChart: function() {
+    if (typeof Chart === 'undefined') return;
+    var sel = document.getElementById('chartMetric');
+    var idx = parseInt(sel.value || '-1', 10);
+    if (isNaN(idx) || idx < 0) return;
+    var labels = [];
+    var values = [];
+    for (var r = 0; r < S.data.length; r++) {
+      var row = S.data[r];
+      var raw = row[idx];
+      var val = parseFloat(String(raw).replace(/\s+/g, '').replace('%', '').replace(',', '.'));
+      if (isNaN(val)) continue;
+      labels.push(String(row[0] || ('Строка ' + (r + 1))));
+      values.push(val);
+      if (labels.length >= 30) break;
+    }
+    var type = this.chartType;
+    var chartType = type;
+    var options = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true}} };
+    if (type === 'horizontalBar') { chartType = 'bar'; options.indexAxis = 'y'; }
+    if (type === 'area') chartType = 'line';
+
+    var ds = {
+      label: S.headers[idx] || 'Показатель',
+      data: values,
+      borderColor: '#1d5fbf',
+      backgroundColor: 'rgba(29,95,191,0.25)',
+      pointRadius: type === 'scatter' ? 4 : 2,
+      fill: type === 'area'
+    };
+    if (type === 'pie' || type === 'doughnut' || type === 'radar') {
+      ds.backgroundColor = values.map(function(_, i){
+        return 'hsla(' + ((i * 37) % 360) + ',70%,55%,0.75)';
+      });
+      ds.borderColor = '#fff';
+    }
+    if (type === 'scatter') {
+      ds.data = values.map(function(v, i){ return { x: i + 1, y: v }; });
+      labels = [];
+    }
+
+    var ctx = document.getElementById('chartCanvas').getContext('2d');
+    if (this.chart) this.chart.destroy();
+    this.chart = new Chart(ctx, { type: chartType, data: { labels: labels, datasets: [ds] }, options: options });
+  }
+};
+
+function switchEditorTab(tabId) {
+  if (tabId === 'analytics') return Analytics.open();
+  return Analytics.close();
 }
 
 function sendChat() {
@@ -1218,6 +1634,7 @@ function sendChat() {
 
   var sendBtn = document.getElementById('btnChatSend');
   sendBtn.disabled = true; sendBtn.textContent = '...';
+  var thinkingNode = addThinking();
 
   var currentTable = { headers: S.headers, rows: S.data };
 
@@ -1229,16 +1646,17 @@ function sendChat() {
   .then(function(r) { return r.json(); })
   .then(function(data) {
     sendBtn.disabled = false; sendBtn.textContent = 'Применить';
+    if (thinkingNode && thinkingNode.parentNode) thinkingNode.parentNode.removeChild(thinkingNode);
     if (data.detail) {
       var d2 = String(data.detail || '');
       if (d2.toLowerCase().indexOf('no such column') !== -1 || d2.toLowerCase().indexOf('не найден') !== -1) {
-        addMsg('Данные не найдены. Попробуйте сформулировать команду по-другому.', 'ai');
+        typeAiMessage('Данные не найдены. Попробуйте сформулировать команду по-другому.');
       } else {
-        addMsg('Ошибка: ' + d2, 'ai');
+        typeAiMessage('Ошибка: ' + d2);
       }
       return;
     }
-    if (data.ai_message) addMsg(data.ai_message, 'ai');
+    if (data.ai_message) typeAiMessage(data.ai_message);
     if ((data.action === 'transform' || data.action === 'query') && data.table) {
       if (data.table.headers && data.table.rows) {
         S.saveUndo();
@@ -1252,12 +1670,18 @@ function sendChat() {
   })
   .catch(function(err) {
     sendBtn.disabled = false; sendBtn.textContent = 'Применить';
-    addMsg('Ошибка соединения: ' + err.message, 'ai');
+    if (thinkingNode && thinkingNode.parentNode) thinkingNode.parentNode.removeChild(thinkingNode);
+    typeAiMessage('Ошибка соединения: ' + err.message);
   });
 }
 
 document.getElementById('btnChatSend').addEventListener('click', sendChat);
 document.getElementById('chatInp').addEventListener('keydown', function(e){ if(e.key==='Enter') sendChat(); });
+document.getElementById('btnAnalytics').addEventListener('click', function(){ switchEditorTab('analytics'); });
+document.getElementById('btnAnalyticsClose').addEventListener('click', function(){ switchEditorTab('table'); });
+document.getElementById('tabTable').addEventListener('click', function(){ switchEditorTab('table'); });
+document.getElementById('tabAnalytics').addEventListener('click', function(){ switchEditorTab('analytics'); });
+document.getElementById('chartMetric').addEventListener('change', function(){ Analytics.renderChart(); });
 
 // ── MODALS ────────────────────────────────────────────────────────────────────
 document.getElementById('btnKeys').addEventListener('click', function(){

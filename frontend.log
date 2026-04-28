@@ -34,3 +34,162 @@
 193.124.203.230 - - [28/Apr/2026 18:29:47] code 404, message File not found
 193.124.203.230 - - [28/Apr/2026 18:29:47] "GET /favicon.ico HTTP/1.1" 404 -
 193.124.203.230 - - [28/Apr/2026 18:30:12] "GET /index.html HTTP/1.1" 200 -
+92.63.197.22 - - [28/Apr/2026 18:41:48] code 400, message Bad request syntax ('\\x03\\x00\\x00\\x13\\x0eà\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x08\\x00')
+92.63.197.22 - - [28/Apr/2026 18:41:48] "\x03\x00\x00\x13\x0eà\x00\x00\x00\x00\x00\x01\x00\x08\x00" 400 -
+----------------------------------------
+Exception occurred during processing of request from ('92.63.197.22', 43678)
+92.63.197.22 - - [28/Apr/2026 18:41:49] code 400, message Bad request syntax ('\\x03\\x00\\x00\\x13\\x0eà\\x00\\x00\\x00\\x00\\x00\\x01\\x00\\x08\\x00')
+92.63.197.22 - - [28/Apr/2026 18:41:49] "\x03\x00\x00\x13\x0eà\x00\x00\x00\x00\x00\x01\x00\x08\x00" 400 -
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/http/server.py", line 1311, in finish_request
+    self.RequestHandlerClass(request, client_address, self,
+  File "/usr/lib/python3.12/http/server.py", line 672, in __init__
+    super().__init__(*args, **kwargs)
+  File "/usr/lib/python3.12/socketserver.py", line 761, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 414, in handle_one_request
+    if not self.parse_request():
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/http/server.py", line 323, in parse_request
+    self.send_error(
+  File "/usr/lib/python3.12/http/server.py", line 491, in send_error
+    self.wfile.write(body)
+  File "/usr/lib/python3.12/socketserver.py", line 840, in write
+    self._sock.sendall(b)
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+193.124.203.230 - - [28/Apr/2026 18:47:22] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 18:47:23] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 18:47:23] "GET /favicon.ico HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 18:47:25] "GET /%D0%A1%D0%9A%D0%9A%20-%20%D0%9A%D0%BE%D0%BD%D1%82%D1%80%D0%BE%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9%20%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80%20%D0%B2%D1%8B%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8/ HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 18:47:28] "GET /%D0%A1%D0%9A%D0%9A%20-%20%D0%9A%D0%BE%D0%BD%D1%82%D1%80%D0%BE%D0%BB%D1%8C%D0%BD%D1%8B%D0%B9%20%D0%BF%D1%80%D0%B8%D0%BC%D0%B5%D1%80%20%D0%B2%D1%8B%D0%B3%D1%80%D1%83%D0%B7%D0%BA%D0%B8/%D0%9A%D0%BE%D0%BF%D0%B8%D1%8F%20%D0%A1%D0%9A%D0%9A%D0%B4%D0%BB%D1%8F%20%D1%85%D0%B0%D0%BA%D0%B0%D1%82%D0%BE%D0%BD%D0%B014.04_%D0%90%D0%A6%D0%9A-%D0%A4%2B%D0%91%D0%A3%D0%90%D0%A3%2B%D0%93%D0%97.xlsx HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 18:49:45] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 18:49:46] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 18:49:46] "GET /favicon.ico HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 18:52:02] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 18:52:03] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 18:52:03] "GET /favicon.ico HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 19:05:00] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 19:05:02] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 19:05:02] "GET /favicon.ico HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 19:08:50] "GET / HTTP/1.1" 304 -
+193.124.203.230 - - [28/Apr/2026 19:12:47] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 19:12:48] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 19:12:48] "GET /favicon.ico HTTP/1.1" 404 -
+69.5.169.105 - - [28/Apr/2026 19:18:54] code 404, message File not found
+69.5.169.105 - - [28/Apr/2026 19:18:54] "GET /zc?action=getInfo HTTP/1.1" 404 -
+5.226.140.77 - - [28/Apr/2026 19:19:07] "GET / HTTP/1.1" 200 -
+188.240.59.43 - - [28/Apr/2026 19:19:07] code 404, message File not found
+188.240.59.43 - - [28/Apr/2026 19:19:07] "GET /favicon.ico HTTP/1.1" 404 -
+193.124.203.230 - - [28/Apr/2026 19:30:59] "GET / HTTP/1.1" 200 -
+193.124.203.230 - - [28/Apr/2026 19:31:00] code 404, message File not found
+193.124.203.230 - - [28/Apr/2026 19:31:00] "GET /favicon.ico HTTP/1.1" 404 -
+----------------------------------------
+Exception occurred during processing of request from ('66.132.172.135', 27094)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 692, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/http/server.py", line 1311, in finish_request
+    self.RequestHandlerClass(request, client_address, self,
+  File "/usr/lib/python3.12/http/server.py", line 672, in __init__
+    super().__init__(*args, **kwargs)
+  File "/usr/lib/python3.12/socketserver.py", line 761, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 404, in handle_one_request
+    self.raw_requestline = self.rfile.readline(65537)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/socket.py", line 707, in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+ConnectionResetError: [Errno 104] Connection reset by peer
+----------------------------------------
+66.132.172.135 - - [28/Apr/2026 19:34:06] "GET / HTTP/1.1" 200 -
+66.132.172.135 - - [28/Apr/2026 19:34:09] code 400, message Bad HTTP/0.9 request type ('\\x16\\x03\\x01\\x00î\\x01\\x00\\x00ê\\x03\\x03¸nF\\x10')
+66.132.172.135 - - [28/Apr/2026 19:34:09] "\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03¸nF\x10\x1f\x01ÁÑÙØ¿\x9a" 400 -
+66.132.172.135 - - [28/Apr/2026 19:34:09] "GET / HTTP/1.1" 200 -
+66.132.172.135 - - [28/Apr/2026 19:34:09] code 505, message Invalid HTTP version (2.0)
+66.132.172.135 - - [28/Apr/2026 19:34:09] "PRI * HTTP/2.0" 505 -
+66.132.172.135 - - [28/Apr/2026 19:34:09] code 404, message File not found
+66.132.172.135 - - [28/Apr/2026 19:34:09] "GET /favicon.ico HTTP/1.1" 404 -
+66.132.172.135 - - [28/Apr/2026 19:34:13] code 400, message Bad HTTP/0.9 request type ('\\x16\\x03\\x01\\x00î\\x01\\x00\\x00ê\\x03\\x03\\x98\\x9e\\x06Ó')
+66.132.172.135 - - [28/Apr/2026 19:34:13] "\x16\x03\x01\x00î\x01\x00\x00ê\x03\x03\x98\x9e\x06Ó\x1fC\x02\x98$ÈÓØ5Å½\x8c\x18Fçw" 400 -
+66.132.172.135 - - [28/Apr/2026 19:34:13] code 404, message File not found
+66.132.172.135 - - [28/Apr/2026 19:34:13] "GET /wiki HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:35:36] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:35:36] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:35:37] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:35:38] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:35:38] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:38:45] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:38:46] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:38:46] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:39:46] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:47] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:39:47] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:39:48] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:48] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:39:48] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:39:50] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:51] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:39:51] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:39:52] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:53] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:54] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:39:54] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:39:54] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:39:55] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:39:55] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:15] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:15] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:15] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:16] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:16] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:17] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:17] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:17] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:17] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:18] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:18] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:18] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:18] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:18] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:19] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:19] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:19] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:23] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:24] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:24] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:25] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:26] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:26] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:26] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:27] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:27] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:40:28] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:40:28] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:40:28] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:41:37] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:41:37] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:41:37] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:42:44] "GET / HTTP/1.1" 304 -
+176.104.142.81 - - [28/Apr/2026 19:43:05] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:43:06] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:43:06] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:43:54] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:43:55] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:43:55] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:44:48] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:44:49] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:44:49] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:45:34] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:45:35] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:45:35] "GET /favicon.ico HTTP/1.1" 404 -
+176.104.142.81 - - [28/Apr/2026 19:45:35] "GET / HTTP/1.1" 200 -
+176.104.142.81 - - [28/Apr/2026 19:45:36] code 404, message File not found
+176.104.142.81 - - [28/Apr/2026 19:45:36] "GET /favicon.ico HTTP/1.1" 404 -
